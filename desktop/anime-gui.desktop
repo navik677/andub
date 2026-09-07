@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Anime GUI
+Name[uk]=Anime GUI
+Comment=Modern anime streaming desktop player
+Comment[uk]=Сучасний додаток для перегляду аніме
+Exec=anime-gui
+Icon=anime-gui
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Player;
+Keywords=anime;player;streaming;
+StartupNotify=true

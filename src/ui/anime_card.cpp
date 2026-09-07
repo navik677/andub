@@ -17,7 +17,15 @@ struct PosterAsyncData {
 static gboolean on_poster_ready(gpointer user_data) {
     auto* data = static_cast<PosterAsyncData*>(user_data);
     if (GTK_IS_PICTURE(data->picture) && !data->path.empty()) {
-        gtk_picture_set_filename(GTK_PICTURE(data->picture), data->path.c_str());
+        GError* err = nullptr;
+        GdkTexture* texture = gdk_texture_new_from_filename(data->path.c_str(), &err);
+        if (texture) {
+            gtk_picture_set_paintable(GTK_PICTURE(data->picture), GDK_PAINTABLE(texture));
+            g_object_unref(texture);
+        } else {
+            if (err) g_error_free(err);
+            gtk_picture_set_filename(GTK_PICTURE(data->picture), data->path.c_str());
+        }
     }
     delete data;
     return G_SOURCE_REMOVE;
@@ -98,6 +106,11 @@ GtkWidget* AnimeCard::create(const Anime& anime, std::function<void(const Anime&
         std::string prov_name = anime.provider;
         if (prov_name == "anilibria") prov_name = "АніЛібрія";
         else if (prov_name == "animevost") prov_name = "AnimeVost";
+        else if (prov_name == "shizaproject") prov_name = "Shiza Project";
+        else if (prov_name == "anibaza") prov_name = "AniBaza";
+        else if (prov_name == "anidub") prov_name = "AniDub";
+        else if (prov_name == "anitube") prov_name = "AniTube UA";
+        else if (prov_name == "dreamcast") prov_name = "Dream Cast";
         GtkWidget* prov_lbl = gtk_label_new(prov_name.c_str());
         gtk_widget_add_css_class(prov_lbl, "card-meta");
         gtk_box_append(GTK_BOX(meta_box), prov_lbl);

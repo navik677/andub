@@ -409,9 +409,18 @@ progressbar > trough > progress {
     border-radius: 6px;
 }
 
+.details-bg-wrapper {
+    background-color: transparent;
+}
+
 .details-backdrop {
-    opacity: 0.55;
-    transition: opacity 350ms ease;
+}
+
+.details-bg-overlay {
+    background: linear-gradient(180deg, 
+        rgba(15, 17, 26, 0.60) 0%, 
+        rgba(15, 17, 26, 0.76) 42%, 
+        )CSS" + t.bg_color + R"CSS( 98%);
 }
 )CSS";
 }

@@ -5,20 +5,17 @@
 
 namespace anime {
 
-class AnilibriaProvider : public BaseProvider {
+class ShizaProjectProvider : public BaseProvider {
 public:
-    std::string name() const override { return "anilibria"; }
-    std::string display_name() const override { return "АніЛібрія"; }
+    std::string name() const override { return "shizaproject"; }
+    std::string display_name() const override { return "Shiza Project"; }
 
     std::vector<Anime> search(const std::string& query, int limit = 30, const std::string& genre = "", int page = 1) override;
     std::vector<Episode> get_episodes(const Anime& anime) override;
     Stream get_stream(const Anime& anime, const Episode& episode) override;
 
 private:
-    std::string api_base = "https://anilibria.top/api/v1";
-    std::string stream_host = "https://cache.libria.fun";
-
-    Anime parse_anime_item(const class json::Value& item);
+    std::string graphql_url = "https://shizaproject.com/graphql";
 };
 
 } // namespace anime

@@ -114,7 +114,7 @@ std::string ImageCache::ensure_blurred_backdrop(const std::string& url) {
     if (orig_path.empty()) return "";
 
     std::string hash = simple_hash(url);
-    std::string blur_path = get_cache_dir() + "/" + hash + "_backdrop.png";
+    std::string blur_path = get_cache_dir() + "/" + hash + "_light_backdrop.png";
     if (std::filesystem::exists(blur_path) && std::filesystem::file_size(blur_path) > 0) {
         return blur_path;
     }
@@ -126,9 +126,9 @@ std::string ImageCache::ensure_blurred_backdrop(const std::string& url) {
         return "";
     }
 
-    // Scale to a panoramic resolution (480x240)
-    int target_w = 480;
-    int target_h = 240;
+    // High resolution for full-window backdrop coverage (960x640)
+    int target_w = 960;
+    int target_h = 640;
     GdkPixbuf* scaled = gdk_pixbuf_scale_simple(src, target_w, target_h, GDK_INTERP_BILINEAR);
     g_object_unref(src);
     if (!scaled) return "";
@@ -142,25 +142,18 @@ std::string ImageCache::ensure_blurred_backdrop(const std::string& url) {
     unsigned char* pixels = gdk_pixbuf_get_pixels(rgba);
     std::vector<unsigned char> temp(stride * target_h);
 
-    // Multi-pass box blur for smooth, cinematic blur
-    int r = 14;
+    // Light box blur (r=6): keeps artwork recognizable and vibrant while softly smoothing edges
+    int r = 6;
     box_blur_horizontal(pixels, temp.data(), target_w, target_h, stride, r);
     box_blur_vertical(temp.data(), pixels, target_w, target_h, stride, r);
     box_blur_horizontal(pixels, temp.data(), target_w, target_h, stride, r);
     box_blur_vertical(temp.data(), pixels, target_w, target_h, stride, r);
 
-    // Apply smooth vertical vignette fade:
-    // Top is visible, bottom fades cleanly to 0% alpha so it dissolves into dark window
+    // Ensure full alpha coverage and subtle rich color balancing
     for (int y = 0; y < target_h; ++y) {
-        float t = static_cast<float>(y) / target_h;
-        float alpha_factor = (1.0f - t);
-        alpha_factor = alpha_factor * alpha_factor;
         unsigned char* row = pixels + y * stride;
         for (int x = 0; x < target_w; ++x) {
-            row[x * 4 + 0] = static_cast<unsigned char>(row[x * 4 + 0] * 0.70f);
-            row[x * 4 + 1] = static_cast<unsigned char>(row[x * 4 + 1] * 0.70f);
-            row[x * 4 + 2] = static_cast<unsigned char>(row[x * 4 + 2] * 0.70f);
-            row[x * 4 + 3] = static_cast<unsigned char>(std::clamp(static_cast<int>(255 * alpha_factor * 0.75f), 0, 255));
+            row[x * 4 + 3] = 255;
         }
     }
 

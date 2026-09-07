@@ -64,7 +64,7 @@ static const std::unordered_map<std::string, int>& get_anilibria_genre_map() {
     return m;
 }
 
-std::vector<Anime> AnilibriaProvider::search(const std::string& query, int limit, const std::string& genre) {
+std::vector<Anime> AnilibriaProvider::search(const std::string& query, int limit, const std::string& genre, int page) {
     std::string url;
     if (!query.empty()) {
         url = api_base + "/app/search/releases?query=" + url_encode(query);
@@ -79,6 +79,11 @@ std::vector<Anime> AnilibriaProvider::search(const std::string& query, int limit
         }
     } else {
         url = api_base + "/anime/releases/latest";
+    }
+
+    if (page > 1) {
+        url += (url.find('?') == std::string::npos ? "?" : "&");
+        url += "page=" + std::to_string(page) + "&limit=" + std::to_string(limit);
     }
 
     auto resp = http::Client::get(url);
