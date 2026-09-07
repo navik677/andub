@@ -214,10 +214,16 @@ GtkWidget* DetailsView::create(
     }
 
     if (!anime.genres.empty()) {
-        GtkWidget* genres_lbl = gtk_label_new(anime.genres_str().c_str());
-        gtk_label_set_wrap(GTK_LABEL(genres_lbl), TRUE);
-        gtk_widget_add_css_class(genres_lbl, "card-meta");
-        gtk_box_append(GTK_BOX(left_col), genres_lbl);
+        GtkWidget* genres_flow = gtk_flow_box_new();
+        gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(genres_flow), GTK_SELECTION_NONE);
+        gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(genres_flow), 6);
+        gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(genres_flow), 6);
+        for (const auto& g : anime.genres) {
+            GtkWidget* chip = gtk_label_new(g.c_str());
+            gtk_widget_add_css_class(chip, "genre-chip");
+            gtk_flow_box_append(GTK_FLOW_BOX(genres_flow), chip);
+        }
+        gtk_box_append(GTK_BOX(left_col), genres_flow);
     }
 
     gtk_box_append(GTK_BOX(content_box), left_col);
@@ -238,6 +244,25 @@ GtkWidget* DetailsView::create(
         gtk_widget_add_css_class(en_lbl, "card-meta");
         gtk_box_append(GTK_BOX(right_col), en_lbl);
     }
+
+    // Metadata row (Year, Age rating, Status)
+    GtkWidget* meta_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    if (anime.year > 0) {
+        GtkWidget* y_lbl = gtk_label_new(std::to_string(anime.year).c_str());
+        gtk_widget_add_css_class(y_lbl, "chip-tag");
+        gtk_box_append(GTK_BOX(meta_row), y_lbl);
+    }
+    if (!anime.age_rating.empty()) {
+        GtkWidget* ar_lbl = gtk_label_new(anime.age_rating.c_str());
+        gtk_widget_add_css_class(ar_lbl, "chip-tag");
+        gtk_box_append(GTK_BOX(meta_row), ar_lbl);
+    }
+    if (!anime.status.empty()) {
+        GtkWidget* st_lbl = gtk_label_new(anime.status.c_str());
+        gtk_widget_add_css_class(st_lbl, "chip-tag");
+        gtk_box_append(GTK_BOX(meta_row), st_lbl);
+    }
+    gtk_box_append(GTK_BOX(right_col), meta_row);
 
     if (!anime.description.empty()) {
         GtkWidget* desc_lbl = gtk_label_new(anime.description.c_str());
