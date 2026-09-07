@@ -24,15 +24,22 @@ static gboolean on_poster_ready(gpointer user_data) {
 }
 
 GtkWidget* AnimeCard::create(const Anime& anime, std::function<void(const Anime&)> on_clicked) {
-    GtkWidget* card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    GtkWidget* card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_widget_add_css_class(card, "anime-card");
-    gtk_widget_set_size_request(card, 180, 290);
+    gtk_widget_set_size_request(card, 210, 360);
+    gtk_widget_set_halign(card, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(card, GTK_ALIGN_START);
+    gtk_widget_set_hexpand(card, FALSE);
+    gtk_widget_set_vexpand(card, FALSE);
     gtk_widget_set_cursor_from_name(card, "pointer");
 
-    // Poster
+    // Poster (Portrait aspect ratio ~2:3)
     GtkWidget* picture = gtk_picture_new();
-    gtk_widget_set_size_request(picture, 164, 230);
-    gtk_picture_set_can_shrink(GTK_PICTURE(picture), TRUE);
+    gtk_widget_set_size_request(picture, 194, 275);
+    gtk_widget_set_halign(picture, GTK_ALIGN_CENTER);
+    gtk_widget_set_hexpand(picture, FALSE);
+    gtk_widget_set_vexpand(picture, FALSE);
+    gtk_picture_set_can_shrink(GTK_PICTURE(picture), FALSE);
     gtk_picture_set_content_fit(GTK_PICTURE(picture), GTK_CONTENT_FIT_COVER);
     gtk_box_append(GTK_BOX(card), picture);
 

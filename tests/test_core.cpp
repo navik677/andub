@@ -10,6 +10,7 @@ int main() {
     std::cout << "Testing JSON parser...\n";
     std::string test_json = R"({
         "title": "Naruto",
+        "cyrillic": "\u0410\u0442\u0430\u043a\u0430 \u0422\u0438\u0442\u0430\u043d\u0456\u0432",
         "year": 2002,
         "genres": ["Action", "Shounen"],
         "active": true,
@@ -19,6 +20,7 @@ int main() {
     auto root = anime::json::Value::parse(test_json);
     assert(root.is_object());
     assert(root["title"].get_str() == "Naruto");
+    assert(root["cyrillic"].get_str() == "Атака Титанів");
     assert(root["year"].get_int() == 2002);
     assert(root["genres"].is_array());
     assert(root["genres"].size() == 2);

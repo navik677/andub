@@ -81,6 +81,12 @@ static gboolean on_search_results_ready(gpointer user_data) {
             });
 
             gtk_flow_box_append(GTK_FLOW_BOX(state->flow_box), card);
+            GtkWidget* child_widget = gtk_widget_get_parent(card);
+            if (child_widget) {
+                gtk_widget_set_halign(child_widget, GTK_ALIGN_CENTER);
+                gtk_widget_set_valign(child_widget, GTK_ALIGN_START);
+                gtk_widget_set_focusable(child_widget, FALSE);
+            }
         }
     }
 
@@ -234,13 +240,16 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
 
     GtkWidget* flow = gtk_flow_box_new();
     gtk_widget_set_valign(flow, GTK_ALIGN_START);
-    gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(flow), 10);
+    gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(flow), 2);
+    gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(flow), 16);
+    gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(flow), 18);
+    gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(flow), 20);
     gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(flow), GTK_SELECTION_NONE);
-    gtk_flow_box_set_homogeneous(GTK_FLOW_BOX(flow), TRUE);
-    gtk_widget_set_margin_start(flow, 16);
-    gtk_widget_set_margin_end(flow, 16);
-    gtk_widget_set_margin_top(flow, 10);
-    gtk_widget_set_margin_bottom(flow, 16);
+    gtk_flow_box_set_homogeneous(GTK_FLOW_BOX(flow), FALSE);
+    gtk_widget_set_margin_start(flow, 20);
+    gtk_widget_set_margin_end(flow, 20);
+    gtk_widget_set_margin_top(flow, 12);
+    gtk_widget_set_margin_bottom(flow, 24);
     state->flow_box = flow;
 
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), flow);
