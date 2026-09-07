@@ -3,10 +3,11 @@
 #include "../utils/json.hpp"
 #include <iostream>
 #include <regex>
+#include "../utils/str_utils.hpp"
 
 namespace anime {
 
-std::vector<Anime> AnimeVostProvider::search(const std::string& query, int limit) {
+std::vector<Anime> AnimeVostProvider::search(const std::string& query, int limit, const std::string& genre) {
     http::Response resp;
     if (query.empty()) {
         resp = http::Client::get(api_base + "/last");
@@ -27,9 +28,20 @@ std::vector<Anime> AnimeVostProvider::search(const std::string& query, int limit
     if (!data_val.is_array()) return {};
 
     std::vector<Anime> results;
-    size_t count = std::min(data_val.size(), static_cast<size_t>(limit));
-    for (size_t i = 0; i < count; ++i) {
-        results.push_back(parse_anime_item(data_val[i]));
+    for (size_t i = 0; i < data_val.size(); ++i) {
+        auto a = parse_anime_item(data_val[i]);
+        if (!genre.empty()) {
+            bool matches = false;
+            for (const auto& g : a.genres) {
+                if (utils::utf8_contains_ci(g, genre)) {
+                    matches = true;
+                    break;
+                }
+            }
+            if (!matches) continue;
+        }
+        results.push_back(std::move(a));
+        if (static_cast<int>(results.size()) >= limit) break;
     }
     return results;
 }
@@ -115,6 +127,35 @@ Anime AnimeVostProvider::parse_anime_item(const json::Value& item) {
     // Replace <br> with newline
     std::regex br_regex(R"(<br\s*/?>)");
     a.description = std::regex_replace(a.description, br_regex, "\n");
+
+    // Parse genres
+    auto g_val = item["genre"];
+    if (g_val.is_string()) {
+        std::string g_str = g_val.get_str();
+        size_t start = 0;
+        while (start < g_str.size()) {
+            size_t comma = g_str.find(',', start);
+            std::string g = (comma == std::string::npos) ? g_str.substr(start) : g_str.substr(start, comma - start);
+            while (!g.empty() && std::isspace(static_cast<unsigned char>(g.front()))) g.erase(g.begin());
+            while (!g.empty() && std::isspace(static_cast<unsigned char>(g.back()))) g.pop_back();
+            if (!g.empty()) a.genres.push_back(g);
+            if (comma == std::string::npos) break;
+            start = comma + 1;
+        }
+    } else if (item["genres"].is_array()) {
+        for (size_t i = 0; i < item["genres"].size(); ++i) {
+            std::string g = item["genres"][i].get_str();
+            if (!g.empty()) a.genres.push_back(g);
+        }
+    }
+
+    int rating = item["rating"].get_int();
+    int votes = item["votes"].get_int();
+    if (rating > 0) {
+        a.rating = "★ " + std::to_string(rating);
+    } else if (votes > 0) {
+        a.rating = "★ " + std::to_string(votes);
+    }
 
     a.provider = name();
     a.poster_url = item["urlImagePreview"].get_str();
