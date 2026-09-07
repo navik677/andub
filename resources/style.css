@@ -1,0 +1,111 @@
+/* Anime GUI Style */
+
+window {
+    background-color: #1a1b26;
+    color: #c0caf5;
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+headerbar {
+    background-color: #16161e;
+    border-bottom: 1px solid #292e42;
+    color: #c0caf5;
+    padding: 6px 12px;
+}
+
+.anime-card {
+    background-color: #24283b;
+    border-radius: 12px;
+    padding: 8px;
+    margin: 6px;
+    transition: all 200ms ease;
+    border: 1px solid #292e42;
+}
+
+.anime-card:hover {
+    background-color: #2f354f;
+    border-color: #7aa2f7;
+    transform: translateY(-2px);
+}
+
+.card-title {
+    font-weight: bold;
+    font-size: 14px;
+    color: #c0caf5;
+    margin-top: 6px;
+}
+
+.card-meta {
+    font-size: 11px;
+    color: #7aa2f7;
+}
+
+.rating-badge {
+    background-color: #e0af68;
+    color: #1a1b26;
+    font-weight: bold;
+    font-size: 11px;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+
+.details-title {
+    font-weight: 800;
+    font-size: 22px;
+    color: #7aa2f7;
+}
+
+.details-desc {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #a9b1d6;
+}
+
+.episode-row {
+    background-color: #24283b;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 4px 0;
+    border: 1px solid #292e42;
+}
+
+.episode-row:hover {
+    background-color: #2f354f;
+    border-color: #7aa2f7;
+}
+
+.watched-badge {
+    color: #9ece6a;
+    font-weight: bold;
+}
+
+button.suggested-action {
+    background-color: #7aa2f7;
+    color: #15161e;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 6px 16px;
+}
+
+button.suggested-action:hover {
+    background-color: #89b4fa;
+}
+
+button.destructive-action {
+    background-color: #f7768e;
+    color: #15161e;
+    font-weight: bold;
+    border-radius: 8px;
+}
+
+entry {
+    background-color: #24283b;
+    border: 1px solid #292e42;
+    border-radius: 8px;
+    color: #c0caf5;
+    padding: 6px 12px;
+}
+
+entry:focus {
+    border-color: #7aa2f7;
+}
