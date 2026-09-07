@@ -3,6 +3,8 @@
 #include "../utils/json.hpp"
 #include <iostream>
 #include <algorithm>
+#include <unordered_map>
+#include "../utils/str_utils.hpp"
 
 namespace anime {
 
@@ -21,12 +23,62 @@ static std::string url_encode(const std::string& value) {
     return escaped.str();
 }
 
-std::vector<Anime> AnilibriaProvider::search(const std::string& query, int limit) {
+static const std::unordered_map<std::string, int>& get_anilibria_genre_map() {
+    static const std::unordered_map<std::string, int> m = {
+        {"боевые искусства", 15},
+        {"вампиры", 24},
+        {"гарем", 32},
+        {"демоны", 16},
+        {"детектив", 25},
+        {"дзёсей", 33},
+        {"драма", 8},
+        {"игры", 17},
+        {"исекай", 34},
+        {"исторический", 26},
+        {"киберпанк", 30},
+        {"комедия", 1},
+        {"магия", 18},
+        {"меха", 2},
+        {"мистика", 9},
+        {"музыка", 19},
+        {"пародия", 36},
+        {"повседневность", 10},
+        {"приключения", 27},
+        {"психологическое", 3},
+        {"романтика", 11},
+        {"сверхъестественное", 28},
+        {"сейнен", 5},
+        {"спорт", 12},
+        {"супер сила", 21},
+        {"сёдзе", 20},
+        {"сёдзе-ай", 31},
+        {"сёнен", 4},
+        {"триллер", 6},
+        {"ужасы", 13},
+        {"фантастика", 22},
+        {"фэнтези", 29},
+        {"школа", 7},
+        {"экшен", 14},
+        {"этти", 23}
+    };
+    return m;
+}
+
+std::vector<Anime> AnilibriaProvider::search(const std::string& query, int limit, const std::string& genre) {
     std::string url;
-    if (query.empty()) {
-        url = api_base + "/anime/releases/latest";
-    } else {
+    if (!query.empty()) {
         url = api_base + "/app/search/releases?query=" + url_encode(query);
+    } else if (!genre.empty()) {
+        std::string lower_g = utils::utf8_tolower(genre);
+        const auto& gmap = get_anilibria_genre_map();
+        auto it = gmap.find(lower_g);
+        if (it != gmap.end()) {
+            url = api_base + "/anime/genres/" + std::to_string(it->second) + "/releases";
+        } else {
+            url = api_base + "/anime/releases/latest";
+        }
+    } else {
+        url = api_base + "/anime/releases/latest";
     }
 
     auto resp = http::Client::get(url);
@@ -36,12 +88,29 @@ std::vector<Anime> AnilibriaProvider::search(const std::string& query, int limit
     }
 
     auto root = json::Value::parse(resp.body);
-    if (!root.is_array()) return {};
+    const json::Value* items = nullptr;
+    if (root.is_array()) {
+        items = &root;
+    } else if (root["data"].is_array()) {
+        items = &root["data"];
+    }
+    if (!items) return {};
 
     std::vector<Anime> results;
-    size_t count = std::min(root.size(), static_cast<size_t>(limit));
-    for (size_t i = 0; i < count; ++i) {
-        results.push_back(parse_anime_item(root[i]));
+    for (size_t i = 0; i < items->size(); ++i) {
+        auto a = parse_anime_item((*items)[i]);
+        if (!genre.empty()) {
+            bool matches = false;
+            for (const auto& g : a.genres) {
+                if (utils::utf8_contains_ci(g, genre)) {
+                    matches = true;
+                    break;
+                }
+            }
+            if (!matches) continue;
+        }
+        results.push_back(std::move(a));
+        if (static_cast<int>(results.size()) >= limit) break;
     }
     return results;
 }

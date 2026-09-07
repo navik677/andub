@@ -40,8 +40,10 @@ GtkWidget* AnimeCard::create(const Anime& anime, std::function<void(const Anime&
 
     GtkWidget* picture = gtk_picture_new();
     gtk_widget_set_size_request(picture, 196, 275);
-    gtk_picture_set_can_shrink(GTK_PICTURE(picture), FALSE);
+    gtk_picture_set_can_shrink(GTK_PICTURE(picture), TRUE);
     gtk_picture_set_content_fit(GTK_PICTURE(picture), GTK_CONTENT_FIT_COVER);
+    gtk_widget_set_hexpand(picture, FALSE);
+    gtk_widget_set_vexpand(picture, FALSE);
     gtk_overlay_set_child(GTK_OVERLAY(overlay), picture);
 
     // Floating rating badge on bottom-right of poster
@@ -70,10 +72,12 @@ GtkWidget* AnimeCard::create(const Anime& anime, std::function<void(const Anime&
     GtkWidget* title_lbl = gtk_label_new(anime.title_ru.c_str());
     gtk_widget_add_css_class(title_lbl, "card-title");
     gtk_label_set_wrap(GTK_LABEL(title_lbl), TRUE);
+    gtk_label_set_wrap_mode(GTK_LABEL(title_lbl), PANGO_WRAP_WORD_CHAR);
+    gtk_label_set_max_width_chars(GTK_LABEL(title_lbl), 20);
     gtk_label_set_lines(GTK_LABEL(title_lbl), 2);
     gtk_label_set_ellipsize(GTK_LABEL(title_lbl), PANGO_ELLIPSIZE_END);
     gtk_label_set_xalign(GTK_LABEL(title_lbl), 0.0f);
-    gtk_widget_set_size_request(title_lbl, 194, -1);
+    gtk_widget_set_size_request(title_lbl, 194, 38);
     gtk_box_append(GTK_BOX(card), title_lbl);
 
     // Meta box (Year + Provider / Age rating chips)

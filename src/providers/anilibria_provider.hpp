@@ -10,7 +10,7 @@ public:
     std::string name() const override { return "anilibria"; }
     std::string display_name() const override { return "АніЛібрія"; }
 
-    std::vector<Anime> search(const std::string& query, int limit = 30) override;
+    std::vector<Anime> search(const std::string& query, int limit = 30, const std::string& genre = "") override;
     std::vector<Episode> get_episodes(const Anime& anime) override;
     Stream get_stream(const Anime& anime, const Episode& episode) override;
 

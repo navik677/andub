@@ -199,6 +199,7 @@ flowboxchild:selected, flowboxchild:focus {
 }
 
 .anime-card {
+    min-width: 210px;
     background-color: )CSS" + t.card_bg + R"CSS(;
     border-radius: 12px;
     padding: 8px;

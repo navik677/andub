@@ -141,7 +141,7 @@ GtkWidget* DetailsView::create(
     gtk_widget_set_margin_start(main_box, 24);
     gtk_widget_set_margin_end(main_box, 24);
     gtk_widget_set_margin_top(main_box, 20);
-    gtk_widget_set_margin_bottom(main_box, 24);
+    gtk_widget_set_margin_bottom(main_box, 32);
 
     // Top action bar
     GtkWidget* top_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
@@ -186,6 +186,7 @@ GtkWidget* DetailsView::create(
     gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), FALSE);
 
     GtkWidget* content_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 28);
+    gtk_widget_set_margin_bottom(content_box, 80);
 
     // Left column: Poster & Meta
     GtkWidget* left_col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
