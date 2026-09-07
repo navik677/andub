@@ -7,6 +7,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <cctype>
+#include <cstdint>
 
 namespace anime::json {
 
@@ -195,6 +196,41 @@ private:
         return Value();
     }
 
+    static int hex_val(char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    }
+
+    static uint32_t parse_hex4(const std::string& s, size_t pos) {
+        uint32_t val = 0;
+        for (size_t i = 0; i < 4; ++i) {
+            int h = hex_val(s[pos + i]);
+            if (h < 0) return 0;
+            val = (val << 4) | h;
+        }
+        return val;
+    }
+
+    static void append_utf8(std::string& out, uint32_t cp) {
+        if (cp <= 0x7F) {
+            out += static_cast<char>(cp);
+        } else if (cp <= 0x7FF) {
+            out += static_cast<char>(0xC0 | ((cp >> 6) & 0x1F));
+            out += static_cast<char>(0x80 | (cp & 0x3F));
+        } else if (cp <= 0xFFFF) {
+            out += static_cast<char>(0xE0 | ((cp >> 12) & 0x0F));
+            out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+            out += static_cast<char>(0x80 | (cp & 0x3F));
+        } else if (cp <= 0x10FFFF) {
+            out += static_cast<char>(0xF0 | ((cp >> 18) & 0x07));
+            out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+            out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+            out += static_cast<char>(0x80 | (cp & 0x3F));
+        }
+    }
+
     static Value parse_string(const std::string& s, size_t& pos) {
         pos++; // skip "
         std::string res;
@@ -212,9 +248,17 @@ private:
                 else if (esc == 'r') res += '\r';
                 else if (esc == 't') res += '\t';
                 else if (esc == 'u' && pos + 4 <= s.size()) {
-                    // simple unicode 2-byte pass or skip
+                    uint32_t cp = parse_hex4(s, pos);
                     pos += 4;
-                    res += '?';
+                    // Handle surrogate pairs for astral planes
+                    if (cp >= 0xD800 && cp <= 0xDBFF && pos + 6 <= s.size() && s[pos] == '\\' && s[pos + 1] == 'u') {
+                        uint32_t low = parse_hex4(s, pos + 2);
+                        if (low >= 0xDC00 && low <= 0xDFFF) {
+                            cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                            pos += 6;
+                        }
+                    }
+                    append_utf8(res, cp);
                 }
             } else {
                 res += c;

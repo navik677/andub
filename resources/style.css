@@ -1,9 +1,12 @@
 /* Anime GUI Style */
 
+* {
+    font-family: system-ui, "Noto Sans", "Liberation Sans", "DejaVu Sans", sans-serif;
+}
+
 window {
     background-color: #1a1b26;
     color: #c0caf5;
-    font-family: system-ui, -apple-system, sans-serif;
 }
 
 headerbar {
@@ -13,26 +16,41 @@ headerbar {
     padding: 6px 12px;
 }
 
+flowboxchild {
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    border-radius: 12px;
+}
+
+flowboxchild:selected, flowboxchild:focus {
+    background: transparent;
+    outline: none;
+}
+
 .anime-card {
     background-color: #24283b;
     border-radius: 12px;
     padding: 8px;
-    margin: 6px;
-    transition: all 200ms ease;
+    transition: all 180ms ease;
     border: 1px solid #292e42;
 }
 
 .anime-card:hover {
     background-color: #2f354f;
     border-color: #7aa2f7;
-    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.anime-card picture {
+    border-radius: 8px;
 }
 
 .card-title {
-    font-weight: bold;
-    font-size: 14px;
+    font-weight: 600;
+    font-size: 13.5px;
     color: #c0caf5;
-    margin-top: 6px;
+    margin-top: 4px;
 }
 
 .card-meta {
