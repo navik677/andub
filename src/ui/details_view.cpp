@@ -137,11 +137,11 @@ GtkWidget* DetailsView::create(
     std::shared_ptr<BaseProvider> provider,
     std::function<void()> on_back
 ) {
-    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-    gtk_widget_set_margin_start(main_box, 20);
-    gtk_widget_set_margin_end(main_box, 20);
-    gtk_widget_set_margin_top(main_box, 12);
-    gtk_widget_set_margin_bottom(main_box, 20);
+    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+    gtk_widget_set_margin_start(main_box, 24);
+    gtk_widget_set_margin_end(main_box, 24);
+    gtk_widget_set_margin_top(main_box, 20);
+    gtk_widget_set_margin_bottom(main_box, 24);
 
     // Top action bar
     GtkWidget* top_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
@@ -185,14 +185,14 @@ GtkWidget* DetailsView::create(
     gtk_widget_set_vexpand(scrolled, TRUE);
     gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), FALSE);
 
-    GtkWidget* content_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 24);
+    GtkWidget* content_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 28);
 
     // Left column: Poster & Meta
-    GtkWidget* left_col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget* left_col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
     gtk_widget_set_size_request(left_col, 220, -1);
 
     GtkWidget* poster = gtk_picture_new();
-    gtk_widget_set_size_request(poster, 220, 320);
+    gtk_widget_set_size_request(poster, 220, 315);
     gtk_picture_set_can_shrink(GTK_PICTURE(poster), TRUE);
     gtk_picture_set_content_fit(GTK_PICTURE(poster), GTK_CONTENT_FIT_COVER);
     gtk_box_append(GTK_BOX(left_col), poster);
