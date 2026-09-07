@@ -181,7 +181,8 @@ window {
 
 headerbar {
     background-color: )CSS" + t.header_bg + R"CSS(;
-    border-bottom: 1px solid )CSS" + t.border_color + R"CSS(;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.32);
     color: )CSS" + t.text_primary + R"CSS(;
     padding: 8px 16px;
 }
@@ -190,7 +191,7 @@ flowboxchild {
     background: transparent;
     padding: 0;
     margin: 0;
-    border-radius: 12px;
+    border-radius: 14px;
 }
 
 flowboxchild:selected, flowboxchild:focus {
@@ -201,31 +202,48 @@ flowboxchild:selected, flowboxchild:focus {
 .anime-card {
     min-width: 210px;
     background-color: )CSS" + t.card_bg + R"CSS(;
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 8px;
     border: 1px solid )CSS" + t.border_color + R"CSS(;
-    transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                border-color 200ms ease,
+                background-color 200ms ease;
 }
 
 .anime-card:hover {
+    transform: translateY(-5px);
     background-color: )CSS" + t.card_hover + R"CSS(;
     border-color: )CSS" + t.accent + R"CSS(;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
 }
 
 .anime-card picture {
-    border-radius: 8px;
+    border-radius: 10px;
+    transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.anime-card:hover picture {
+    transform: scale(1.025);
 }
 
 .poster-overlay-rating {
-    background-color: rgba(18, 18, 24, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
+    background-color: rgba(14, 14, 20, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+    border-radius: 7px;
     padding: 3px 8px;
     font-size: 11px;
     font-weight: 700;
     color: )CSS" + t.badge_bg + R"CSS(;
     margin: 8px;
+    transition: transform 180ms ease, background-color 180ms ease;
+}
+
+.anime-card:hover .poster-overlay-rating {
+    transform: scale(1.06);
+    background-color: rgba(14, 14, 20, 0.95);
 }
 
 .card-title {
@@ -248,6 +266,12 @@ flowboxchild:selected, flowboxchild:focus {
     border-radius: 6px;
     padding: 2px 8px;
     font-size: 11px;
+    transition: all 140ms ease;
+}
+
+.chip-tag:hover {
+    color: )CSS" + t.text_primary + R"CSS(;
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .details-title {
@@ -271,25 +295,58 @@ flowboxchild:selected, flowboxchild:focus {
     padding: 4px 12px;
     font-size: 12px;
     font-weight: 500;
+    transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+                background-color 160ms ease,
+                border-color 160ms ease;
+}
+
+.genre-chip:hover {
+    transform: translateY(-2px);
+    border-color: )CSS" + t.accent + R"CSS(;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
 .episode-row {
     background-color: )CSS" + t.card_bg + R"CSS(;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 10px 16px;
     margin: 0;
     border: 1px solid )CSS" + t.border_color + R"CSS(;
-    transition: background-color 120ms ease;
+    transition: transform 160ms cubic-bezier(0.2, 0.9, 0.3, 1),
+                background-color 160ms ease,
+                border-color 160ms ease,
+                box-shadow 160ms ease;
 }
 
 .episode-row:hover {
+    transform: translateX(6px);
     background-color: )CSS" + t.card_hover + R"CSS(;
+    border-color: )CSS" + t.accent + R"CSS(;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .watched-badge {
     color: #57e389;
     font-weight: 800;
     font-size: 14px;
+}
+
+button {
+    border-radius: 8px;
+    font-weight: 500;
+    transition: transform 140ms cubic-bezier(0.2, 0.9, 0.3, 1),
+                box-shadow 180ms ease,
+                background-color 180ms ease,
+                border-color 180ms ease;
+}
+
+button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+button:active {
+    transform: translateY(1px) scale(0.97);
 }
 
 button.suggested-action {
@@ -303,6 +360,7 @@ button.suggested-action {
 
 button.suggested-action:hover {
     background-color: )CSS" + t.accent_hover + R"CSS(;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
 
 button.flat {
@@ -316,16 +374,28 @@ button.flat:hover {
     background-color: )CSS" + t.chip_bg + R"CSS(;
 }
 
-entry {
+dropdown {
+    border-radius: 8px;
+    transition: transform 140ms ease, box-shadow 180ms ease;
+}
+
+dropdown:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+searchentry, entry {
     background-color: )CSS" + t.card_bg + R"CSS(;
     border: 1px solid )CSS" + t.border_color + R"CSS(;
     border-radius: 8px;
     color: )CSS" + t.text_primary + R"CSS(;
     padding: 6px 12px;
+    transition: box-shadow 200ms ease, border-color 200ms ease;
 }
 
-entry:focus {
+searchentry:focus-within, entry:focus {
     border-color: )CSS" + t.accent + R"CSS(;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1), 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
 progressbar > trough {
@@ -337,6 +407,11 @@ progressbar > trough {
 progressbar > trough > progress {
     background-color: )CSS" + t.accent + R"CSS(;
     border-radius: 6px;
+}
+
+.details-backdrop {
+    opacity: 0.55;
+    transition: opacity 350ms ease;
 }
 )CSS";
 }

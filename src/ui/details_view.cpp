@@ -137,11 +137,37 @@ GtkWidget* DetailsView::create(
     std::shared_ptr<BaseProvider> provider,
     std::function<void()> on_back
 ) {
+    GtkWidget* root_overlay = gtk_overlay_new();
+    gtk_widget_set_vexpand(root_overlay, TRUE);
+    gtk_widget_set_hexpand(root_overlay, TRUE);
+
+    GtkWidget* bg_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_vexpand(bg_box, TRUE);
+    gtk_widget_set_hexpand(bg_box, TRUE);
+
+    // Blurred Backdrop Banner in background
+    GtkWidget* backdrop_pic = gtk_picture_new();
+    gtk_widget_set_valign(backdrop_pic, GTK_ALIGN_START);
+    gtk_widget_set_halign(backdrop_pic, GTK_ALIGN_FILL);
+    gtk_widget_set_hexpand(backdrop_pic, TRUE);
+    gtk_widget_set_size_request(backdrop_pic, -1, 380);
+    gtk_picture_set_content_fit(GTK_PICTURE(backdrop_pic), GTK_CONTENT_FIT_COVER);
+    gtk_picture_set_can_shrink(GTK_PICTURE(backdrop_pic), TRUE);
+    gtk_widget_add_css_class(backdrop_pic, "details-backdrop");
+    gtk_widget_set_can_target(backdrop_pic, FALSE);
+    gtk_box_append(GTK_BOX(bg_box), backdrop_pic);
+
+    gtk_overlay_set_child(GTK_OVERLAY(root_overlay), bg_box);
+
     GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+    gtk_widget_set_vexpand(main_box, TRUE);
+    gtk_widget_set_hexpand(main_box, TRUE);
     gtk_widget_set_margin_start(main_box, 24);
     gtk_widget_set_margin_end(main_box, 24);
     gtk_widget_set_margin_top(main_box, 20);
     gtk_widget_set_margin_bottom(main_box, 32);
+
+    gtk_overlay_add_overlay(GTK_OVERLAY(root_overlay), main_box);
 
     // Top action bar
     GtkWidget* top_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
@@ -308,7 +334,24 @@ GtkWidget* DetailsView::create(
         g_idle_add(on_episodes_loaded, data);
     }).detach();
 
-    return main_box;
+    // Asynchronously load blurred hero backdrop
+    if (!anime.poster_url.empty()) {
+        std::thread([backdrop_ptr = backdrop_pic, url = anime.poster_url]() {
+            std::string path = ImageCache::ensure_blurred_backdrop(url);
+            if (!path.empty()) {
+                g_idle_add(+[](gpointer p) -> gboolean {
+                    auto* d = static_cast<std::pair<GtkWidget*, std::string>*>(p);
+                    if (GTK_IS_PICTURE(d->first)) {
+                        gtk_picture_set_filename(GTK_PICTURE(d->first), d->second.c_str());
+                    }
+                    delete d;
+                    return G_SOURCE_REMOVE;
+                }, new std::pair<GtkWidget*, std::string>(backdrop_ptr, path));
+            }
+        }).detach();
+    }
+
+    return root_overlay;
 }
 
 } // namespace anime::ui
