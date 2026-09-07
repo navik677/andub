@@ -233,7 +233,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     gtk_widget_set_vexpand(scrolled, TRUE);
 
     GtkWidget* flow = gtk_flow_box_new();
-    gtk_flow_box_set_valign(GTK_FLOW_BOX(flow), GTK_ALIGN_START);
+    gtk_widget_set_valign(flow, GTK_ALIGN_START);
     gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(flow), 10);
     gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(flow), GTK_SELECTION_NONE);
     gtk_flow_box_set_homogeneous(GTK_FLOW_BOX(flow), TRUE);
