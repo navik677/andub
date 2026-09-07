@@ -16,6 +16,7 @@ struct AppState {
     GtkWindow* window;
     GtkWidget* stack;
     GtkWidget* flow_box;
+    GtkWidget* status_box;
     GtkWidget* spinner;
     GtkWidget* status_label;
     GtkWidget* search_entry;
@@ -55,9 +56,11 @@ static gboolean on_search_results_ready(gpointer user_data) {
     }
 
     if (data->items.empty()) {
+        gtk_widget_set_visible(state->status_box, TRUE);
         gtk_widget_set_visible(state->status_label, TRUE);
         gtk_label_set_text(GTK_LABEL(state->status_label), "Нічого не знайдено.");
     } else {
+        gtk_widget_set_visible(state->status_box, FALSE);
         gtk_widget_set_visible(state->status_label, FALSE);
         for (const auto& item : data->items) {
             GtkWidget* card = AnimeCard::create(item, [state](const Anime& anime) {
@@ -96,6 +99,9 @@ static gboolean on_search_results_ready(gpointer user_data) {
 }
 
 static void do_search(AppState* state) {
+    if (state->status_box) {
+        gtk_widget_set_visible(state->status_box, TRUE);
+    }
     if (GTK_IS_SPINNER(state->spinner)) {
         gtk_widget_set_visible(state->spinner, TRUE);
         gtk_spinner_start(GTK_SPINNER(state->spinner));
@@ -269,8 +275,10 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     GtkWidget* catalog_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
     // Spinner and Status
-    GtkWidget* status_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_widget_set_margin_top(status_box, 20);
+    GtkWidget* status_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_set_margin_top(status_box, 32);
+    gtk_widget_set_margin_bottom(status_box, 16);
+    state->status_box = status_box;
 
     GtkWidget* spinner = gtk_spinner_new();
     state->spinner = spinner;
@@ -291,13 +299,13 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     gtk_widget_set_valign(flow, GTK_ALIGN_START);
     gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(flow), 2);
     gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(flow), 16);
-    gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(flow), 18);
+    gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(flow), 20);
     gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(flow), 20);
     gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(flow), GTK_SELECTION_NONE);
     gtk_flow_box_set_homogeneous(GTK_FLOW_BOX(flow), FALSE);
-    gtk_widget_set_margin_start(flow, 20);
-    gtk_widget_set_margin_end(flow, 20);
-    gtk_widget_set_margin_top(flow, 12);
+    gtk_widget_set_margin_start(flow, 24);
+    gtk_widget_set_margin_end(flow, 24);
+    gtk_widget_set_margin_top(flow, 24);
     gtk_widget_set_margin_bottom(flow, 24);
     state->flow_box = flow;
 

@@ -183,7 +183,7 @@ headerbar {
     background-color: )CSS" + t.header_bg + R"CSS(;
     border-bottom: 1px solid )CSS" + t.border_color + R"CSS(;
     color: )CSS" + t.text_primary + R"CSS(;
-    padding: 6px 14px;
+    padding: 8px 16px;
 }
 
 flowboxchild {
@@ -201,7 +201,7 @@ flowboxchild:selected, flowboxchild:focus {
 .anime-card {
     background-color: )CSS" + t.card_bg + R"CSS(;
     border-radius: 12px;
-    padding: 7px;
+    padding: 8px;
     border: 1px solid )CSS" + t.border_color + R"CSS(;
     transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
 }
@@ -220,7 +220,7 @@ flowboxchild:selected, flowboxchild:focus {
     background-color: rgba(18, 18, 24, 0.85);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 6px;
-    padding: 2px 7px;
+    padding: 3px 8px;
     font-size: 11px;
     font-weight: 700;
     color: )CSS" + t.badge_bg + R"CSS(;
@@ -232,7 +232,7 @@ flowboxchild:selected, flowboxchild:focus {
     font-size: 13.5px;
     color: )CSS" + t.text_primary + R"CSS(;
     margin-top: 4px;
-    line-height: 1.3;
+    line-height: 1.35;
 }
 
 .card-meta {
@@ -245,7 +245,7 @@ flowboxchild:selected, flowboxchild:focus {
     color: )CSS" + t.text_secondary + R"CSS(;
     border: 1px solid )CSS" + t.border_color + R"CSS(;
     border-radius: 6px;
-    padding: 1px 6px;
+    padding: 2px 8px;
     font-size: 11px;
 }
 
@@ -275,8 +275,8 @@ flowboxchild:selected, flowboxchild:focus {
 .episode-row {
     background-color: )CSS" + t.card_bg + R"CSS(;
     border-radius: 8px;
-    padding: 8px 14px;
-    margin: 3px 0;
+    padding: 10px 16px;
+    margin: 0;
     border: 1px solid )CSS" + t.border_color + R"CSS(;
     transition: background-color 120ms ease;
 }
@@ -296,7 +296,7 @@ button.suggested-action {
     color: #ffffff;
     font-weight: 600;
     border-radius: 8px;
-    padding: 6px 16px;
+    padding: 7px 18px;
     border: none;
 }
 
