@@ -32,6 +32,7 @@ sources = files(
   'src/services/history_manager.cpp',
   'src/services/favorites_manager.cpp',
   'src/services/download_service.cpp',
+  'src/services/theme_manager.cpp',
   'src/providers/anilibria_provider.cpp',
   'src/providers/animevost_provider.cpp',
   'src/ui/anime_card.cpp',

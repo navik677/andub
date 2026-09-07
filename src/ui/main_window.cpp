@@ -5,6 +5,7 @@
 #include "../providers/anilibria_provider.hpp"
 #include "../providers/animevost_provider.hpp"
 #include "../services/favorites_manager.hpp"
+#include "../services/theme_manager.hpp"
 #include <thread>
 #include <vector>
 #include <string>
@@ -150,22 +151,35 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     GtkWidget* header = gtk_header_bar_new();
     gtk_header_bar_set_show_title_buttons(GTK_HEADER_BAR(header), TRUE);
 
-    // Provider DropDown
-    const char* provider_names[] = {"АніЛібрія", "AnimeVost", "★ Улюблені", nullptr};
+    // Left container: Provider switch & Favorites button
+    GtkWidget* left_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+
+    const char* provider_names[] = {"АніЛібрія", "AnimeVost", nullptr};
     GtkWidget* prov_drop = gtk_drop_down_new_from_strings(provider_names);
-    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), prov_drop);
+    gtk_box_append(GTK_BOX(left_box), prov_drop);
+
+    GtkWidget* fav_toggle = gtk_toggle_button_new_with_label("★ Улюблені");
+    gtk_box_append(GTK_BOX(left_box), fav_toggle);
 
     g_signal_connect_data(
         prov_drop, "notify::selected",
         G_CALLBACK(+[](GObject* obj, GParamSpec*, gpointer user_data) {
             auto* s = static_cast<AppState*>(user_data);
-            guint sel = gtk_drop_down_get_selected(GTK_DROP_DOWN(obj));
-            if (sel == 2) {
-                s->is_favorites_mode = true;
-            } else {
-                s->is_favorites_mode = false;
-                s->current_provider_idx = sel;
+            s->current_provider_idx = gtk_drop_down_get_selected(GTK_DROP_DOWN(obj));
+            if (!s->is_favorites_mode) {
+                do_search(s);
             }
+        }),
+        state,
+        nullptr,
+        static_cast<GConnectFlags>(0)
+    );
+
+    g_signal_connect_data(
+        fav_toggle, "toggled",
+        G_CALLBACK(+[](GtkToggleButton* btn, gpointer user_data) {
+            auto* s = static_cast<AppState*>(user_data);
+            s->is_favorites_mode = gtk_toggle_button_get_active(btn);
             do_search(s);
         }),
         state,
@@ -173,9 +187,11 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
         static_cast<GConnectFlags>(0)
     );
 
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), left_box);
+
     // Search Entry
     GtkWidget* search_entry = gtk_search_entry_new();
-    gtk_widget_set_size_request(search_entry, 320, -1);
+    gtk_widget_set_size_request(search_entry, 340, -1);
     gtk_search_entry_set_key_capture_widget(GTK_SEARCH_ENTRY(search_entry), window);
     state->search_entry = search_entry;
     gtk_header_bar_set_title_widget(GTK_HEADER_BAR(header), search_entry);
@@ -195,8 +211,39 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
         static_cast<GConnectFlags>(0)
     );
 
-    // Downloads Button
-    GtkWidget* dl_btn = gtk_button_new_with_label("⬇ Завантаження");
+    // Right container: Theme selector & Downloads button
+    GtkWidget* right_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+
+    const auto& themes = ThemeManager::get_themes();
+    std::vector<const char*> theme_labels;
+    for (const auto& th : themes) {
+        theme_labels.push_back(th.name.c_str());
+    }
+    theme_labels.push_back(nullptr);
+
+    GtkWidget* theme_drop = gtk_drop_down_new_from_strings(theme_labels.data());
+    std::string curr_th = ThemeManager::get_current_theme_id();
+    for (guint i = 0; i < themes.size(); ++i) {
+        if (themes[i].id == curr_th) {
+            gtk_drop_down_set_selected(GTK_DROP_DOWN(theme_drop), i);
+            break;
+        }
+    }
+
+    g_signal_connect(
+        theme_drop, "notify::selected",
+        G_CALLBACK(+[](GObject* obj, GParamSpec*, gpointer) {
+            guint sel = gtk_drop_down_get_selected(GTK_DROP_DOWN(obj));
+            const auto& ths = ThemeManager::get_themes();
+            if (sel < ths.size()) {
+                ThemeManager::apply_theme(ths[sel].id);
+            }
+        }),
+        nullptr
+    );
+    gtk_box_append(GTK_BOX(right_box), theme_drop);
+
+    GtkWidget* dl_btn = gtk_button_new_with_label("Завантаження");
     g_signal_connect_data(
         dl_btn, "clicked",
         G_CALLBACK(+[](GtkButton*, gpointer user_data) {
@@ -207,7 +254,9 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
         nullptr,
         static_cast<GConnectFlags>(0)
     );
-    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), dl_btn);
+    gtk_box_append(GTK_BOX(right_box), dl_btn);
+
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), right_box);
 
     gtk_window_set_titlebar(GTK_WINDOW(window), header);
 
