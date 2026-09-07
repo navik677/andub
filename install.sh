@@ -2,69 +2,66 @@
 
 set -e
 
-echo -e "\033[1;36m==> Встановлення Anime TUI...\033[0m"
+echo -e "\033[1;36m==> Встановлення Anime GUI (C++ GTK4)...\033[0m"
 
-# 1. Check for Python 3
-if ! command -v python3 &> /dev/null; then
-    echo -e "\033[1;31m[Помилка]\033[0m Python 3 не знайдено. Встановіть Python 3."
-    exit 1
-fi
+# 1. Перевірка компілятора та системних інструментів
+MISSING_DEPS=""
+if ! command -v g++ &> /dev/null && ! command -v clang++ &> /dev/null; then MISSING_DEPS="g++ $MISSING_DEPS"; fi
+if ! command -v meson &> /dev/null; then MISSING_DEPS="meson $MISSING_DEPS"; fi
+if ! command -v ninja &> /dev/null; then MISSING_DEPS="ninja $MISSING_DEPS"; fi
+if ! command -v pkg-config &> /dev/null; then MISSING_DEPS="pkg-config $MISSING_DEPS"; fi
+if ! pkg-config --exists gtk4; then MISSING_DEPS="gtk4-devel $MISSING_DEPS"; fi
+if ! pkg-config --exists libcurl; then MISSING_DEPS="libcurl-devel $MISSING_DEPS"; fi
+if ! command -v mpv &> /dev/null; then MISSING_DEPS="mpv $MISSING_DEPS"; fi
 
-# 2. Check for system dependencies (fzf, mpv)
-echo -e "\033[1;34m==> Перевірка системних залежностей (fzf, mpv, yt-dlp)...\033[0m"
-MISSING_PKGS=""
-if ! command -v fzf &> /dev/null; then MISSING_PKGS="fzf $MISSING_PKGS"; fi
-if ! command -v mpv &> /dev/null; then MISSING_PKGS="mpv $MISSING_PKGS"; fi
-if ! command -v yt-dlp &> /dev/null; then MISSING_PKGS="yt-dlp $MISSING_PKGS"; fi
-
-if [ -n "$MISSING_PKGS" ]; then
-    echo -e "\033[1;33m[Попередження]\033[0m Відсутні системні пакети: $MISSING_PKGS"
+if [ -n "$MISSING_DEPS" ]; then
+    echo -e "\033[1;33m[Попередження]\033[0m Відсутні необхідні пакунки: $MISSING_DEPS"
     echo -e "Спроба автоматичного встановлення..."
-    
-    if command -v apt-get &> /dev/null; then
-        sudo apt-get update && sudo apt-get install -y $MISSING_PKGS
-    elif command -v pacman &> /dev/null; then
-        sudo pacman -S --noconfirm $MISSING_PKGS
+    if command -v pacman &> /dev/null; then
+        sudo pacman -S --needed --noconfirm base-devel meson ninja gtk4 curl mpv yt-dlp || true
+    elif command -v apt-get &> /dev/null; then
+        sudo apt-get update && sudo apt-get install -y build-essential meson ninja-build libgtk-4-dev libcurl4-openssl-dev mpv yt-dlp || true
     elif command -v dnf &> /dev/null; then
-        sudo dnf install -y $MISSING_PKGS
-    elif command -v brew &> /dev/null; then
-        brew install $MISSING_PKGS
-    else
-        echo -e "\033[1;31m[Помилка]\033[0m Не вдалося визначити пакетний менеджер. Будь ласка, встановіть '$MISSING_PKGS' вручну."
-        exit 1
+        sudo dnf install -y gcc-c++ meson ninja-build gtk4-devel libcurl-devel mpv yt-dlp || true
     fi
 fi
 
-# 3. Create virtualenv and install python dependencies
-VENV_DIR="$HOME/.local/share/anime-tui/venv"
-echo -e "\033[1;34m==> Налаштування віртуального середовища Python...\033[0m"
-mkdir -p "$HOME/.local/share/anime-tui"
-python3 -m venv "$VENV_DIR"
+# 2. Збірка програми
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-echo -e "\033[1;34m==> Встановлення Python пакетів...\033[0m"
-"$VENV_DIR/bin/pip" install --upgrade pip
-"$VENV_DIR/bin/pip" install requests climage HdRezkaApi
+echo -e "\033[1;34m==> Компіляція проекту...\033[0m"
+if [ ! -d "build" ]; then
+    meson setup build --buildtype=release
+fi
+ninja -C build
 
-# 4. Copy source code
-echo -e "\033[1;34m==> Копіювання файлів...\033[0m"
-rm -rf "$HOME/.local/share/anime-tui/anime_tui"
-cp -r anime_tui "$HOME/.local/share/anime-tui/"
+# 3. Встановлення бінарника
+PREFIX_BIN="$HOME/.local/bin"
+PREFIX_DATA="$HOME/.local/share"
+mkdir -p "$PREFIX_BIN" "$PREFIX_DATA/applications" "$PREFIX_DATA/icons/hicolor/256x256/apps" "$PREFIX_DATA/anime-gui"
 
-# 5. Create executable wrapper
-BIN_DIR="$HOME/.local/bin"
-mkdir -p "$BIN_DIR"
-WRAPPER="$BIN_DIR/anime-tui"
+echo -e "\033[1;34m==> Встановлення файлів у $HOME/.local/...\033[0m"
+cp -f build/anime-gui "$PREFIX_BIN/anime-gui"
+chmod +x "$PREFIX_BIN/anime-gui"
+ln -sf "$PREFIX_BIN/anime-gui" "$PREFIX_BIN/anime-tui"
 
-cat > "$WRAPPER" << 'EOF'
-#!/usr/bin/env bash
-export PYTHONPATH="$HOME/.local/share/anime-tui:$PYTHONPATH"
-exec "$HOME/.local/share/anime-tui/venv/bin/python" -m anime_tui.main "$@"
-EOF
+# Копіювання ресурсів
+cp -f resources/style.css "$PREFIX_DATA/anime-gui/style.css"
+if [ -f "resources/anime-gui.png" ]; then
+    cp -f resources/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/anime-gui.png"
+elif [ -f "desktop/anime-gui.png" ]; then
+    cp -f desktop/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/anime-gui.png"
+fi
 
-chmod +x "$WRAPPER"
+# Встановлення .desktop ярлика
+if [ -f "desktop/anime-gui.desktop" ]; then
+    sed -e "s|Exec=anime-gui|Exec=$PREFIX_BIN/anime-gui|g" desktop/anime-gui.desktop > "$PREFIX_DATA/applications/anime-gui.desktop"
+    chmod +x "$PREFIX_DATA/applications/anime-gui.desktop"
+    if command -v update-desktop-database &> /dev/null; then
+        update-desktop-database "$PREFIX_DATA/applications" || true
+    fi
+fi
 
-echo -e "\033[1;32m[Готово!]\033[0m Anime TUI успішно встановлено!"
-echo -e "Увага: переконайтеся, що \033[1m$BIN_DIR\033[0m додано до вашого \$PATH."
-echo -e "Якщо ви використовуєте ZSH або Bash і команда 'anime-tui' не працює, виконайте:"
-echo -e "  \033[36mecho 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc && source ~/.zshrc\033[0m"
-echo -e "\nЗапустити програму можна командою: \033[1;36manime-tui\033[0m"
+echo -e "\033[1;32m[Готово!]\033[0m Anime GUI успішно встановлено!"
+echo -e "Додаток доступний у меню програм або через термінал командою: \033[1;36manime-gui\033[0m (або \033[1;36manime-tui\033[0m)"

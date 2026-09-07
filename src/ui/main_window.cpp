@@ -3,7 +3,12 @@
 #include "details_view.hpp"
 #include "downloads_view.hpp"
 #include "../providers/anilibria_provider.hpp"
+#include "../providers/shizaproject_provider.hpp"
+#include "../providers/anibaza_provider.hpp"
+#include "../providers/anidub_provider.hpp"
+#include "../providers/anitube_provider.hpp"
 #include "../providers/animevost_provider.hpp"
+#include "../providers/dreamcast_provider.hpp"
 #include "../services/favorites_manager.hpp"
 #include "../services/theme_manager.hpp"
 #include "../utils/str_utils.hpp"
@@ -53,15 +58,17 @@ static const std::vector<std::string> RUSSIAN_GENRES = {
 };
 
 struct AppState {
-    GtkWindow* window;
-    GtkWidget* stack;
-    GtkWidget* flow_box;
-    GtkWidget* status_box;
-    GtkWidget* spinner;
-    GtkWidget* status_label;
-    GtkWidget* search_entry;
-    GtkWidget* genre_drop;
-    GtkWidget* details_container;
+    GtkWindow* window = nullptr;
+    GtkWidget* stack = nullptr;
+    GtkWidget* flow_box = nullptr;
+    GtkWidget* scrolled_window = nullptr;
+    GtkWidget* status_box = nullptr;
+    GtkWidget* spinner = nullptr;
+    GtkWidget* status_label = nullptr;
+    GtkWidget* search_entry = nullptr;
+    GtkWidget* genre_drop = nullptr;
+    GtkWidget* details_container = nullptr;
+    GtkWidget* pagination_box = nullptr;
 
     std::vector<std::shared_ptr<BaseProvider>> providers;
     size_t current_provider_idx = 0;
@@ -70,6 +77,7 @@ struct AppState {
     guint search_debounce_id = 0;
     std::string current_query;
     std::string current_genre;
+    int current_page = 1;
 };
 
 struct SearchResultData {
@@ -80,6 +88,103 @@ struct SearchResultData {
 };
 
 static void do_search(AppState* state);
+
+static void update_pagination_ui(AppState* state, bool has_results) {
+    if (!state->pagination_box) return;
+
+    GtkWidget* child = gtk_widget_get_first_child(state->pagination_box);
+    while (child) {
+        GtkWidget* next = gtk_widget_get_next_sibling(child);
+        gtk_box_remove(GTK_BOX(state->pagination_box), child);
+        child = next;
+    }
+
+    if (state->is_favorites_mode || !has_results) {
+        gtk_widget_set_visible(state->pagination_box, FALSE);
+        return;
+    }
+
+    gtk_widget_set_visible(state->pagination_box, TRUE);
+
+    int cur = state->current_page;
+    if (cur < 1) cur = 1;
+
+    // « Prev button
+    GtkWidget* prev_btn = gtk_button_new_with_label("«");
+    gtk_widget_add_css_class(prev_btn, "flat");
+    gtk_widget_set_sensitive(prev_btn, cur > 1);
+    g_signal_connect_data(
+        prev_btn, "clicked",
+        G_CALLBACK(+[](GtkButton*, gpointer user_data) {
+            auto* s = static_cast<AppState*>(user_data);
+            if (s->current_page > 1) {
+                s->current_page--;
+                do_search(s);
+                if (s->scrolled_window) {
+                    GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(s->scrolled_window));
+                    if (vadj) gtk_adjustment_set_value(vadj, 0.0);
+                }
+            }
+        }),
+        state, nullptr, static_cast<GConnectFlags>(0)
+    );
+    gtk_box_append(GTK_BOX(state->pagination_box), prev_btn);
+
+    // Numbered buttons (sliding window of 5 pages centered around current)
+    int start_p = std::max(1, cur - 2);
+    int end_p = start_p + 4;
+
+    for (int p = start_p; p <= end_p; ++p) {
+        GtkWidget* p_btn = gtk_button_new_with_label(std::to_string(p).c_str());
+        if (p == cur) {
+            gtk_widget_add_css_class(p_btn, "suggested-action");
+        } else {
+            gtk_widget_add_css_class(p_btn, "flat");
+        }
+        gtk_widget_set_size_request(p_btn, 42, 36);
+
+        g_signal_connect_data(
+            p_btn, "clicked",
+            G_CALLBACK(+[](GtkButton* btn, gpointer user_data) {
+                auto* s = static_cast<AppState*>(user_data);
+                const char* lbl = gtk_button_get_label(btn);
+                if (lbl) {
+                    try {
+                        int target = std::stoi(lbl);
+                        if (target != s->current_page) {
+                            s->current_page = target;
+                            do_search(s);
+                            if (s->scrolled_window) {
+                                GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(s->scrolled_window));
+                                if (vadj) gtk_adjustment_set_value(vadj, 0.0);
+                            }
+                        }
+                    } catch (...) {}
+                }
+            }),
+            state, nullptr, static_cast<GConnectFlags>(0)
+        );
+        gtk_box_append(GTK_BOX(state->pagination_box), p_btn);
+    }
+
+    // » Next button
+    GtkWidget* next_btn = gtk_button_new_with_label("»");
+    gtk_widget_add_css_class(next_btn, "flat");
+    g_signal_connect_data(
+        next_btn, "clicked",
+        G_CALLBACK(+[](GtkButton*, gpointer user_data) {
+            auto* s = static_cast<AppState*>(user_data);
+            s->current_page++;
+            do_search(s);
+            if (s->scrolled_window) {
+                GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(s->scrolled_window));
+                if (vadj) gtk_adjustment_set_value(vadj, 0.0);
+            }
+        }),
+        state, nullptr, static_cast<GConnectFlags>(0)
+    );
+    gtk_box_append(GTK_BOX(state->pagination_box), next_btn);
+}
 
 static gboolean on_search_results_ready(gpointer user_data) {
     auto* data = static_cast<SearchResultData*>(user_data);
@@ -143,6 +248,8 @@ static gboolean on_search_results_ready(gpointer user_data) {
         }
     }
 
+    update_pagination_ui(state, !data->items.empty());
+
     delete data;
     return G_SOURCE_REMOVE;
 }
@@ -191,7 +298,8 @@ static void do_search(AppState* state) {
         }
     }
 
-    std::thread([state, query_text, query_genre, favs, prov]() {
+    int page = state->current_page;
+    std::thread([state, query_text, query_genre, favs, prov, page]() {
         std::vector<Anime> results;
         if (favs) {
             auto all_favs = FavoritesManager::get_favorites();
@@ -215,7 +323,7 @@ static void do_search(AppState* state) {
                 }
             }
         } else {
-            results = prov->search(query_text, 35, query_genre);
+            results = prov->search(query_text, 35, query_genre, page);
         }
 
         auto* res_data = new SearchResultData{state, std::move(results), query_text, query_genre};
@@ -239,6 +347,11 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     state->window = GTK_WINDOW(window);
     state->providers = {
         std::make_shared<AnilibriaProvider>(),
+        std::make_shared<DreamCastProvider>(),
+        std::make_shared<ShizaProjectProvider>(),
+        std::make_shared<AniBazaProvider>(),
+        std::make_shared<AniDubProvider>(),
+        std::make_shared<AniTubeProvider>(),
         std::make_shared<AnimeVostProvider>()
     };
 
@@ -249,8 +362,16 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     // Left container: Provider switch, Russian Genre dropdown, Favorites button
     GtkWidget* left_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
 
-    const char* provider_names[] = {"АніЛібрія", "AnimeVost", nullptr};
-    GtkWidget* prov_drop = gtk_drop_down_new_from_strings(provider_names);
+    std::vector<std::string> prov_name_strings;
+    for (const auto& p : state->providers) {
+        prov_name_strings.push_back(p->display_name());
+    }
+    std::vector<const char*> provider_names;
+    for (const auto& name_str : prov_name_strings) {
+        provider_names.push_back(name_str.c_str());
+    }
+    provider_names.push_back(nullptr);
+    GtkWidget* prov_drop = gtk_drop_down_new_from_strings(provider_names.data());
     gtk_box_append(GTK_BOX(left_box), prov_drop);
 
     std::vector<const char*> genre_cstrs;
@@ -270,6 +391,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
         G_CALLBACK(+[](GObject* obj, GParamSpec*, gpointer user_data) {
             auto* s = static_cast<AppState*>(user_data);
             s->current_provider_idx = gtk_drop_down_get_selected(GTK_DROP_DOWN(obj));
+            s->current_page = 1;
             if (!s->is_favorites_mode) {
                 do_search(s);
             }
@@ -289,6 +411,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
             } else {
                 s->current_genre = RUSSIAN_GENRES[sel];
             }
+            s->current_page = 1;
             do_search(s);
         }),
         state,
@@ -301,6 +424,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
         G_CALLBACK(+[](GtkToggleButton* btn, gpointer user_data) {
             auto* s = static_cast<AppState*>(user_data);
             s->is_favorites_mode = gtk_toggle_button_get_active(btn);
+            s->current_page = 1;
             do_search(s);
         }),
         state,
@@ -314,6 +438,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     GtkWidget* search_entry = gtk_search_entry_new();
     gtk_widget_set_size_request(search_entry, 300, -1);
     gtk_search_entry_set_key_capture_widget(GTK_SEARCH_ENTRY(search_entry), window);
+    gtk_search_entry_set_placeholder_text(GTK_SEARCH_ENTRY(search_entry), "Пошук аніме...");
     state->search_entry = search_entry;
     gtk_header_bar_set_title_widget(GTK_HEADER_BAR(header), search_entry);
 
@@ -322,6 +447,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
         G_CALLBACK(+[](GtkSearchEntry* entry, gpointer user_data) {
             auto* s = static_cast<AppState*>(user_data);
             s->current_query = gtk_editable_get_text(GTK_EDITABLE(entry));
+            s->current_page = 1;
             if (s->search_debounce_id > 0) {
                 g_source_remove(s->search_debounce_id);
             }
@@ -407,9 +533,10 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
 
     gtk_box_append(GTK_BOX(catalog_box), status_box);
 
-    // Scrolled window for Grid with generous bottom margin
+    // Scrolled window for Grid
     GtkWidget* scrolled = gtk_scrolled_window_new();
     gtk_widget_set_vexpand(scrolled, TRUE);
+    state->scrolled_window = scrolled;
 
     GtkWidget* flow = gtk_flow_box_new();
     gtk_widget_set_valign(flow, GTK_ALIGN_START);
@@ -422,12 +549,19 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     gtk_widget_set_margin_start(flow, 24);
     gtk_widget_set_margin_end(flow, 24);
     gtk_widget_set_margin_top(flow, 20);
-    gtk_widget_set_margin_bottom(flow, 80);
+    gtk_widget_set_margin_bottom(flow, 24);
     state->flow_box = flow;
 
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), flow);
     gtk_box_append(GTK_BOX(catalog_box), scrolled);
-    gtk_widget_set_margin_bottom(catalog_box, 32);
+
+    // Bottom Pagination Bar
+    GtkWidget* pagination_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_set_halign(pagination_box, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(pagination_box, 10);
+    gtk_widget_set_margin_bottom(pagination_box, 16);
+    state->pagination_box = pagination_box;
+    gtk_box_append(GTK_BOX(catalog_box), pagination_box);
 
     gtk_stack_add_named(GTK_STACK(stack), catalog_box, "catalog");
 

@@ -204,7 +204,7 @@ bool Client::download_file(const std::string& url, const std::string& dest_path,
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec));
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, file_write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
@@ -214,7 +214,7 @@ bool Client::download_file(const std::string& url, const std::string& dest_path,
     return (res == CURLE_OK);
 #else
     std::ostringstream cmd;
-    cmd << "curl -s -L --max-time " << timeout_sec << " -A \"Mozilla/5.0\" -o \"" << dest_path << "\" \"" << url << "\"";
+    cmd << "curl -s -L --max-time " << timeout_sec << " -A \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36\" -o \"" << dest_path << "\" \"" << url << "\"";
     return (std::system(cmd.str().c_str()) == 0);
 #endif
 }

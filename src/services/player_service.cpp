@@ -3,8 +3,12 @@
 #include <vector>
 #include <thread>
 #include <cstdlib>
+#include <glib.h>
+
+#ifndef _WIN32
 #include <unistd.h>
 #include <sys/wait.h>
+#endif
 
 namespace anime {
 
@@ -46,6 +50,14 @@ bool PlayerService::play(const Quality& quality, const std::string& anime_title,
         for (auto& s : args) c_args.push_back(s.data());
         c_args.push_back(nullptr);
 
+#ifdef _WIN32
+        GError* gerr = nullptr;
+        g_spawn_async(nullptr, c_args.data(), nullptr, G_SPAWN_SEARCH_PATH, nullptr, nullptr, nullptr, &gerr);
+        if (gerr) {
+            std::cerr << "[PlayerService] g_spawn_async error: " << gerr->message << "\n";
+            g_error_free(gerr);
+        }
+#else
         pid_t pid = fork();
         if (pid == 0) {
             // Child process
@@ -55,6 +67,7 @@ bool PlayerService::play(const Quality& quality, const std::string& anime_title,
             int status = 0;
             waitpid(pid, &status, 0);
         }
+#endif
     }).detach();
 
     return true;

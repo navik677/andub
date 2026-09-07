@@ -6,6 +6,9 @@
 #include "../services/download_service.hpp"
 #include <thread>
 #include <vector>
+#include <cmath>
+#include <algorithm>
+#include <iostream>
 
 namespace anime::ui {
 
@@ -63,18 +66,27 @@ static void populate_episodes(DetailsContext* ctx, const std::vector<Episode>& e
             play_btn, "clicked",
             G_CALLBACK(+[](GtkButton*, gpointer user_data) {
                 auto* d = static_cast<PlayData*>(user_data);
-                std::thread([d]() {
-                    Stream s = d->provider->get_stream(d->anime, d->ep);
-                    const Quality* q = s.best();
-                    if (q) {
-                        PlayerService::play(*q, d->anime.title_ru, &d->ep);
-                        HistoryManager::mark_watched(d->anime.provider, d->anime.id, d->ep.number);
-                        g_idle_add(+[](gpointer p) -> gboolean {
-                            auto* lbl = static_cast<GtkWidget*>(p);
-                            if (GTK_IS_LABEL(lbl)) gtk_label_set_text(GTK_LABEL(lbl), "✓");
-                            return G_SOURCE_REMOVE;
-                        }, d->mark_lbl);
-                    }
+                if (!d || !d->provider) return;
+                Anime a = d->anime;
+                Episode ep = d->ep;
+                auto prov = d->provider;
+                GtkWidget* lbl = d->mark_lbl;
+                std::thread([a = std::move(a), ep = std::move(ep), prov = std::move(prov), lbl]() {
+                    try {
+                        Stream s = prov->get_stream(a, ep);
+                        const Quality* q = s.best();
+                        if (q) {
+                            PlayerService::play(*q, a.title_ru, &ep);
+                            HistoryManager::mark_watched(a.provider, a.id, ep.number);
+                            g_idle_add(+[](gpointer p) -> gboolean {
+                                auto* mark = static_cast<GtkWidget*>(p);
+                                if (GTK_IS_LABEL(mark)) gtk_label_set_text(GTK_LABEL(mark), "✓");
+                                return G_SOURCE_REMOVE;
+                            }, lbl);
+                        }
+                    } catch (const std::exception& ex) {
+                        std::cerr << "[DetailsView] Play stream error: " << ex.what() << "\n";
+                    } catch (...) {}
                 }).detach();
             }),
             pd,
@@ -95,14 +107,33 @@ static void populate_episodes(DetailsContext* ctx, const std::vector<Episode>& e
 
         g_signal_connect_data(
             dl_btn, "clicked",
-            G_CALLBACK(+[](GtkButton*, gpointer user_data) {
+            G_CALLBACK(+[](GtkButton* btn, gpointer user_data) {
                 auto* d = static_cast<DlData*>(user_data);
-                std::thread([d]() {
-                    Stream s = d->provider->get_stream(d->anime, d->ep);
-                    const Quality* q = s.best();
-                    if (q) {
-                        DownloadService::instance().start_download(d->anime, d->ep, q->label, q->url);
-                    }
+                if (!d || !d->provider) return;
+                Anime a = d->anime;
+                Episode ep = d->ep;
+                auto prov = d->provider;
+
+                gtk_widget_set_sensitive(GTK_WIDGET(btn), FALSE);
+
+                std::thread([a = std::move(a), ep = std::move(ep), prov = std::move(prov), btn]() {
+                    try {
+                        Stream s = prov->get_stream(a, ep);
+                        const Quality* q = s.best();
+                        if (q) {
+                            DownloadService::instance().start_download(a, ep, q->label, q->url);
+                        }
+                    } catch (const std::exception& ex) {
+                        std::cerr << "[DetailsView] Download stream error: " << ex.what() << "\n";
+                    } catch (...) {}
+
+                    g_idle_add(+[](gpointer p) -> gboolean {
+                        auto* b = static_cast<GtkWidget*>(p);
+                        if (GTK_IS_WIDGET(b)) {
+                            gtk_widget_set_sensitive(b, TRUE);
+                        }
+                        return G_SOURCE_REMOVE;
+                    }, btn);
                 }).detach();
             }),
             dd,
@@ -144,20 +175,30 @@ GtkWidget* DetailsView::create(
     GtkWidget* bg_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_vexpand(bg_box, TRUE);
     gtk_widget_set_hexpand(bg_box, TRUE);
+    gtk_widget_add_css_class(bg_box, "details-bg-wrapper");
 
-    // Blurred Backdrop Banner in background
+    // Full-screen Blurred Backdrop Image with living wallpaper animation
     GtkWidget* backdrop_pic = gtk_picture_new();
-    gtk_widget_set_valign(backdrop_pic, GTK_ALIGN_START);
+    gtk_widget_set_valign(backdrop_pic, GTK_ALIGN_FILL);
     gtk_widget_set_halign(backdrop_pic, GTK_ALIGN_FILL);
     gtk_widget_set_hexpand(backdrop_pic, TRUE);
-    gtk_widget_set_size_request(backdrop_pic, -1, 380);
+    gtk_widget_set_vexpand(backdrop_pic, TRUE);
     gtk_picture_set_content_fit(GTK_PICTURE(backdrop_pic), GTK_CONTENT_FIT_COVER);
     gtk_picture_set_can_shrink(GTK_PICTURE(backdrop_pic), TRUE);
     gtk_widget_add_css_class(backdrop_pic, "details-backdrop");
     gtk_widget_set_can_target(backdrop_pic, FALSE);
+    gtk_widget_set_opacity(backdrop_pic, 0.0); // Starts transparent for smooth fade-in
     gtk_box_append(GTK_BOX(bg_box), backdrop_pic);
 
     gtk_overlay_set_child(GTK_OVERLAY(root_overlay), bg_box);
+
+    // Dark glass gradient overlay for high contrast and readability across themes
+    GtkWidget* glass_overlay = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_vexpand(glass_overlay, TRUE);
+    gtk_widget_set_hexpand(glass_overlay, TRUE);
+    gtk_widget_add_css_class(glass_overlay, "details-bg-overlay");
+    gtk_widget_set_can_target(glass_overlay, FALSE);
+    gtk_overlay_add_overlay(GTK_OVERLAY(root_overlay), glass_overlay);
 
     GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
     gtk_widget_set_vexpand(main_box, TRUE);
@@ -334,7 +375,7 @@ GtkWidget* DetailsView::create(
         g_idle_add(on_episodes_loaded, data);
     }).detach();
 
-    // Asynchronously load blurred hero backdrop
+    // Asynchronously load lightly blurred cover backdrop with living wallpaper ambient animation
     if (!anime.poster_url.empty()) {
         std::thread([backdrop_ptr = backdrop_pic, url = anime.poster_url]() {
             std::string path = ImageCache::ensure_blurred_backdrop(url);
@@ -343,6 +384,35 @@ GtkWidget* DetailsView::create(
                     auto* d = static_cast<std::pair<GtkWidget*, std::string>*>(p);
                     if (GTK_IS_PICTURE(d->first)) {
                         gtk_picture_set_filename(GTK_PICTURE(d->first), d->second.c_str());
+                        gtk_widget_add_css_class(d->first, "loaded");
+
+                        struct AnimState {
+                            gint64 start_time = 0;
+                        };
+                        auto* anim = new AnimState();
+                        gtk_widget_add_tick_callback(
+                            d->first,
+                            +[](GtkWidget* widget, GdkFrameClock* clock, gpointer user_data) -> gboolean {
+                                auto* st = static_cast<AnimState*>(user_data);
+                                gint64 now = gdk_frame_clock_get_frame_time(clock);
+                                if (st->start_time == 0) {
+                                    st->start_time = now;
+                                }
+                                double elapsed = static_cast<double>(now - st->start_time) / 1000000.0;
+
+                                // Smooth entrance fade over first 0.8s
+                                double entrance = std::min(1.0, elapsed / 0.8);
+
+                                // Ambient slow breathing sine wave (14s cycle between 0.48 and 0.62 opacity)
+                                double breathe = 0.5 + 0.5 * std::sin(elapsed * 0.45);
+                                double target_op = (0.48 + 0.14 * breathe) * entrance;
+
+                                gtk_widget_set_opacity(widget, target_op);
+                                return G_SOURCE_CONTINUE;
+                            },
+                            anim,
+                            [](gpointer data) { delete static_cast<AnimState*>(data); }
+                        );
                     }
                     delete d;
                     return G_SOURCE_REMOVE;

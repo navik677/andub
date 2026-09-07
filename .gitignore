@@ -4,4 +4,7 @@ __pycache__/
 .DS_Store
 *.egg-info/
 build/
+build_win/
 dist/
+tools/
+squashfs-root/

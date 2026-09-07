@@ -7,10 +7,11 @@
 
 namespace anime {
 
-std::vector<Anime> AnimeVostProvider::search(const std::string& query, int limit, const std::string& genre) {
+std::vector<Anime> AnimeVostProvider::search(const std::string& query, int limit, const std::string& genre, int page) {
     http::Response resp;
     if (query.empty()) {
-        resp = http::Client::get(api_base + "/last");
+        std::string url = api_base + "/last?page=" + std::to_string(page) + "&quantity=" + std::to_string(limit);
+        resp = http::Client::get(url);
     } else {
         std::string post_data = "name=" + query;
         resp = http::Client::post(api_base + "/search", post_data, {
