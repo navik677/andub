@@ -384,6 +384,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     // Main Stack
     GtkWidget* stack = gtk_stack_new();
     gtk_stack_set_transition_type(GTK_STACK(stack), GTK_STACK_TRANSITION_TYPE_CROSSFADE);
+    gtk_stack_set_transition_duration(GTK_STACK(stack), 260);
     state->stack = stack;
 
     // --- Catalog View ---
