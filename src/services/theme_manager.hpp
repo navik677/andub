@@ -30,8 +30,6 @@ public:
     static void set_current_theme_id(const std::string& theme_id);
     static void apply_theme(const std::string& theme_id);
     static std::string generate_css(const Theme& theme);
-
-private:
     static std::string get_config_file();
 };
 

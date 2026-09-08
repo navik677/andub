@@ -9,7 +9,11 @@ namespace anime::ui {
 
 class AnimeCard {
 public:
-    static GtkWidget* create(const Anime& anime, std::function<void(const Anime&)> on_clicked);
+    static GtkWidget* create(
+        const Anime& anime,
+        std::function<void(const Anime&)> on_clicked,
+        std::function<void(const Anime&)> on_hover = nullptr
+    );
 };
 
 } // namespace anime::ui

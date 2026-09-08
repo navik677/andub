@@ -1,29 +1,24 @@
 #pragma once
 
 #include <gtk/gtk.h>
-#include <functional>
-#include <memory>
+#include <string>
 #include <vector>
+#include <memory>
+#include <functional>
 #include "../models/anime.hpp"
 #include "../models/episode.hpp"
 #include "../providers/base_provider.hpp"
 
 namespace anime::ui {
 
-using OnPlayEpisodeCallback = std::function<void(
-    const Anime&,
-    const std::vector<Episode>&,
-    size_t,
-    std::shared_ptr<BaseProvider>
-)>;
-
-class DetailsView {
+class PlayerView {
 public:
     static GtkWidget* create(
         const Anime& anime,
+        const std::vector<Episode>& all_episodes,
+        size_t initial_episode_idx,
         std::shared_ptr<BaseProvider> provider,
-        std::function<void()> on_back,
-        OnPlayEpisodeCallback on_play_episode = nullptr
+        std::function<void()> on_close
     );
 };
 

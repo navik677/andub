@@ -24,25 +24,37 @@ static std::string dreamcast_url_encode(const std::string& value) {
 
 std::vector<Anime> DreamCastProvider::search(const std::string& query, int limit, const std::string& genre, int page) {
     std::string url;
-    int fetch_limit = (page > 1) ? (limit * page) : limit;
-    if (fetch_limit > 100) fetch_limit = 100;
+    size_t target_skip = (page > 1) ? static_cast<size_t>((page - 1) * limit) : 0;
+    size_t batches_to_skip = target_skip / 100;
+    size_t in_batch_skip = target_skip % 100;
 
     if (query.empty()) {
         url = api_base + "/list?token=" + api_token +
               "&translation_id=" + std::to_string(translation_id) +
-              "&types=anime-serial,anime&with_material_data=true&limit=" + std::to_string(fetch_limit);
+              "&types=anime-serial,anime&with_material_data=true&limit=100";
     } else {
         url = api_base + "/search?token=" + api_token +
               "&translation_id=" + std::to_string(translation_id) +
               "&title=" + dreamcast_url_encode(query) +
-              "&types=anime-serial,anime&with_material_data=true&limit=" + std::to_string(fetch_limit);
+              "&types=anime-serial,anime&with_material_data=true&limit=100";
     }
 
     std::map<std::string, std::string> headers = {
         {"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     };
 
-    auto resp = http::Client::get(url, headers);
+    // Advance cursor if needed
+    std::string current_url = url;
+    for (size_t b = 0; b < batches_to_skip; ++b) {
+        auto resp = http::Client::get(current_url, headers);
+        if (!resp.success()) break;
+        auto root = json::Value::parse(resp.body);
+        std::string next_p = root["next_page"].get_str();
+        if (next_p.empty()) break;
+        current_url = next_p;
+    }
+
+    auto resp = http::Client::get(current_url, headers);
     if (!resp.success()) {
         std::cerr << "[DreamCast] API request failed: " << resp.error << " (status: " << resp.status_code << ")\n";
         return {};
@@ -54,7 +66,7 @@ std::vector<Anime> DreamCastProvider::search(const std::string& query, int limit
 
     std::vector<Anime> results;
     std::string lower_genre = utils::utf8_tolower(genre);
-    size_t skip_count = (page > 1) ? static_cast<size_t>((page - 1) * limit) : 0;
+    size_t skip_count = in_batch_skip;
     size_t matched_count = 0;
 
     for (size_t i = 0; i < results_val.size(); ++i) {

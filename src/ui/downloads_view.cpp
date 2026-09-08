@@ -38,8 +38,8 @@ static void update_downloads_list(GtkWidget* list_box) {
         gtk_box_append(GTK_BOX(top_box), title);
 
         std::string status_text = job.progress_percent;
-        if (job.is_done) status_text = "Завершено ✓";
-        else if (job.has_error) status_text = "Помилка ✗";
+        if (job.is_done) status_text = "Завершено";
+        else if (job.has_error) status_text = "Помилка";
         GtkWidget* status_lbl = gtk_label_new(status_text.c_str());
         gtk_widget_add_css_class(status_lbl, "card-meta");
         gtk_box_append(GTK_BOX(top_box), status_lbl);

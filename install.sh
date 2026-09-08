@@ -38,30 +38,37 @@ ninja -C build
 
 # 3. Встановлення бінарника
 PREFIX_BIN="$HOME/.local/bin"
+PREFIX_LIB="$HOME/.local/lib"
 PREFIX_DATA="$HOME/.local/share"
-mkdir -p "$PREFIX_BIN" "$PREFIX_DATA/applications" "$PREFIX_DATA/icons/hicolor/256x256/apps" "$PREFIX_DATA/anime-gui"
+mkdir -p "$PREFIX_BIN" "$PREFIX_LIB" "$PREFIX_DATA/applications" "$PREFIX_DATA/icons/hicolor/256x256/apps" "$PREFIX_DATA/andub"
 
 echo -e "\033[1;34m==> Встановлення файлів у $HOME/.local/...\033[0m"
-cp -f build/anime-gui "$PREFIX_BIN/anime-gui"
-chmod +x "$PREFIX_BIN/anime-gui"
-ln -sf "$PREFIX_BIN/anime-gui" "$PREFIX_BIN/anime-tui"
+cp -f build/andub "$PREFIX_BIN/andub"
+chmod +x "$PREFIX_BIN/andub"
+ln -sf "$PREFIX_BIN/andub" "$PREFIX_BIN/anime-gui"
+ln -sf "$PREFIX_BIN/andub" "$PREFIX_BIN/anime-tui"
+cp -d lib/libmpv.so* "$PREFIX_LIB/" 2>/dev/null || true
 
 # Копіювання ресурсів
-cp -f resources/style.css "$PREFIX_DATA/anime-gui/style.css"
+cp -f resources/style.css "$PREFIX_DATA/andub/style.css"
 if [ -f "resources/anime-gui.png" ]; then
-    cp -f resources/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/anime-gui.png"
+    cp -f resources/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/andub.png"
 elif [ -f "desktop/anime-gui.png" ]; then
-    cp -f desktop/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/anime-gui.png"
+    cp -f desktop/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/andub.png"
 fi
 
 # Встановлення .desktop ярлика
-if [ -f "desktop/anime-gui.desktop" ]; then
-    sed -e "s|Exec=anime-gui|Exec=$PREFIX_BIN/anime-gui|g" desktop/anime-gui.desktop > "$PREFIX_DATA/applications/anime-gui.desktop"
-    chmod +x "$PREFIX_DATA/applications/anime-gui.desktop"
-    if command -v update-desktop-database &> /dev/null; then
-        update-desktop-database "$PREFIX_DATA/applications" || true
-    fi
+if [ -f "desktop/andub.desktop" ]; then
+    sed -e "s|Exec=andub|Exec=$PREFIX_BIN/andub|g" desktop/andub.desktop > "$PREFIX_DATA/applications/andub.desktop"
+    chmod +x "$PREFIX_DATA/applications/andub.desktop"
+elif [ -f "desktop/anime-gui.desktop" ]; then
+    sed -e "s|Exec=anime-gui|Exec=$PREFIX_BIN/andub|g" desktop/anime-gui.desktop > "$PREFIX_DATA/applications/andub.desktop"
+    chmod +x "$PREFIX_DATA/applications/andub.desktop"
 fi
 
-echo -e "\033[1;32m[Готово!]\033[0m Anime GUI успішно встановлено!"
-echo -e "Додаток доступний у меню програм або через термінал командою: \033[1;36manime-gui\033[0m (або \033[1;36manime-tui\033[0m)"
+if command -v update-desktop-database &> /dev/null; then
+    update-desktop-database "$PREFIX_DATA/applications" || true
+fi
+
+echo -e "\033[1;32m[Готово!]\033[0m Andub успішно встановлено!"
+echo -e "Додаток доступний у меню програм або через термінал командою: \033[1;36mandub\033[0m (або \033[1;36manime-gui\033[0m / \033[1;36manime-tui\033[0m)"

@@ -38,7 +38,7 @@ DownloadService& DownloadService::instance() {
     return s;
 }
 
-void DownloadService::start_download(const Anime& anime, const Episode& episode, const std::string& quality, const std::string& stream_url) {
+void DownloadService::start_download(const Anime& anime, const Episode& episode, const std::string& quality, const std::string& stream_url, const std::map<std::string, std::string>& headers) {
     DownloadJob job;
     job.anime_title = anime.title_ru.empty() ? "Аніме" : anime.title_ru;
     job.episode_title = episode.display_title();
@@ -55,7 +55,7 @@ void DownloadService::start_download(const Anime& anime, const Episode& episode,
 
     send_notification("Початок завантаження", job.anime_title + " — " + job.episode_title);
 
-    std::thread([this, job_idx, job]() {
+    std::thread([this, job_idx, job, headers]() {
         try {
             std::error_code ec;
             const char* home = std::getenv("HOME");
@@ -104,7 +104,16 @@ void DownloadService::start_download(const Anime& anime, const Episode& episode,
             std::string safe_url = job.url;
             for (char& c : safe_url) { if (c == '"' || c == '$' || c == '`') c = '_'; }
 
-            std::string cmd = "yt-dlp --newline -o \"" + out_path + "\" \"" + safe_url + "\" 2>&1";
+            std::string cmd = "yt-dlp --newline";
+            if (headers.count("Referer")) {
+                cmd += " --referer \"" + headers.at("Referer") + "\"";
+            }
+            for (const auto& [k, v] : headers) {
+                if (k != "Referer") {
+                    cmd += " --add-header \"" + k + ": " + v + "\"";
+                }
+            }
+            cmd += " -o \"" + out_path + "\" \"" + safe_url + "\" 2>&1";
             FILE* pipe = popen(cmd.c_str(), "r");
             if (!pipe) {
                 std::lock_guard<std::mutex> lock(mutex_);
