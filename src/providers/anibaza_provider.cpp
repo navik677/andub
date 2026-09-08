@@ -24,7 +24,8 @@ static std::string anibaza_url_encode(const std::string& value) {
 }
 
 std::vector<Anime> AniBazaProvider::search(const std::string& query, int limit, const std::string& /*genre*/, int page) {
-    (void)page;
+    size_t skip_count = (page > 1) ? static_cast<size_t>((page - 1) * limit) : 0;
+
     if (query.empty()) {
         std::map<std::string, std::string> home_headers = {
             {"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
@@ -35,7 +36,7 @@ std::vector<Anime> AniBazaProvider::search(const std::string& query, int limit, 
             std::regex card_re(R"raw(<div class="release__card">[\s\S]*?<a\s+href="/release/([a-zA-Z0-9_-]+)/"[\s\S]*?<img[^>]+src="([^"]+)"[^>]+alt="([^"]+)")raw");
             auto begin = std::sregex_iterator(resp.body.begin(), resp.body.end(), card_re);
             auto end = std::sregex_iterator();
-            std::vector<Anime> results;
+            std::vector<Anime> all_items;
             for (auto it = begin; it != end; ++it) {
                 std::smatch m = *it;
                 Anime a;
@@ -48,15 +49,20 @@ std::vector<Anime> AniBazaProvider::search(const std::string& query, int limit, 
                     a.poster_url = (poster.rfind("http", 0) != 0) ? (base_url + poster) : poster;
                 }
                 bool duplicate = false;
-                for (const auto& existing : results) {
+                for (const auto& existing : all_items) {
                     if (existing.id == a.id) { duplicate = true; break; }
                 }
                 if (!duplicate) {
-                    results.push_back(std::move(a));
-                    if (static_cast<int>(results.size()) >= limit) break;
+                    all_items.push_back(std::move(a));
                 }
             }
-            if (!results.empty()) return results;
+
+            std::vector<Anime> results;
+            for (size_t i = skip_count; i < all_items.size(); ++i) {
+                results.push_back(std::move(all_items[i]));
+                if (static_cast<int>(results.size()) >= limit) break;
+            }
+            return results;
         }
     }
 
@@ -79,7 +85,7 @@ std::vector<Anime> AniBazaProvider::search(const std::string& query, int limit, 
     if (!results_val.is_array()) return {};
 
     std::vector<Anime> results;
-    for (size_t i = 0; i < results_val.size(); ++i) {
+    for (size_t i = skip_count; i < results_val.size(); ++i) {
         auto item = results_val[i];
         Anime a;
         a.id = item["slug"].get_str();

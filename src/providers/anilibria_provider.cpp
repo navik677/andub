@@ -65,25 +65,23 @@ static const std::unordered_map<std::string, int>& get_anilibria_genre_map() {
 }
 
 std::vector<Anime> AnilibriaProvider::search(const std::string& query, int limit, const std::string& genre, int page) {
-    std::string url;
+    int effective_limit = std::clamp(limit, 1, 30);
+    int effective_page = std::max(1, page);
+
+    std::string url = api_base + "/anime/catalog/releases?page=" + std::to_string(effective_page) +
+                      "&limit=" + std::to_string(effective_limit);
+
     if (!query.empty()) {
-        url = api_base + "/app/search/releases?query=" + url_encode(query);
-    } else if (!genre.empty()) {
+        url += "&f[search]=" + url_encode(query);
+    }
+
+    if (!genre.empty()) {
         std::string lower_g = utils::utf8_tolower(genre);
         const auto& gmap = get_anilibria_genre_map();
         auto it = gmap.find(lower_g);
         if (it != gmap.end()) {
-            url = api_base + "/anime/genres/" + std::to_string(it->second) + "/releases";
-        } else {
-            url = api_base + "/anime/releases/latest";
+            url += "&f[genres][0]=" + std::to_string(it->second);
         }
-    } else {
-        url = api_base + "/anime/releases/latest";
-    }
-
-    if (page > 1) {
-        url += (url.find('?') == std::string::npos ? "?" : "&");
-        url += "page=" + std::to_string(page) + "&limit=" + std::to_string(limit);
     }
 
     auto resp = http::Client::get(url);
@@ -104,18 +102,8 @@ std::vector<Anime> AnilibriaProvider::search(const std::string& query, int limit
     std::vector<Anime> results;
     for (size_t i = 0; i < items->size(); ++i) {
         auto a = parse_anime_item((*items)[i]);
-        if (!genre.empty()) {
-            bool matches = false;
-            for (const auto& g : a.genres) {
-                if (utils::utf8_contains_ci(g, genre)) {
-                    matches = true;
-                    break;
-                }
-            }
-            if (!matches) continue;
-        }
         results.push_back(std::move(a));
-        if (static_cast<int>(results.size()) >= limit) break;
+        if (static_cast<int>(results.size()) >= effective_limit) break;
     }
     return results;
 }

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Andub
+Name[uk]=Andub
+Comment=Modern anime streaming desktop player
+Comment[uk]=Сучасний додаток для перегляду аніме
+Exec=andub
+Icon=andub
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Player;
+Keywords=anime;player;streaming;andub;
+StartupNotify=true

@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <map>
 #include "../models/episode.hpp"
 #include "../models/anime.hpp"
 
@@ -26,7 +27,7 @@ class DownloadService {
 public:
     static DownloadService& instance();
 
-    void start_download(const Anime& anime, const Episode& episode, const std::string& quality, const std::string& stream_url);
+    void start_download(const Anime& anime, const Episode& episode, const std::string& quality, const std::string& stream_url, const std::map<std::string, std::string>& headers = {});
     std::vector<DownloadJob> get_jobs();
 
 private:

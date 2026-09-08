@@ -19,6 +19,7 @@ struct DetailsContext {
     GtkWidget* spinner;
     GtkWidget* progress_lbl;
     GtkWidget* fav_btn;
+    OnPlayEpisodeCallback on_play_episode;
 };
 
 struct EpisodesLoadedData {
@@ -32,7 +33,8 @@ static void populate_episodes(DetailsContext* ctx, const std::vector<Episode>& e
     auto watched = HistoryManager::get_watched_episodes(ctx->anime.provider, ctx->anime.id);
     int watched_count = 0;
 
-    for (const auto& ep : episodes) {
+    for (size_t ep_idx = 0; ep_idx < episodes.size(); ++ep_idx) {
+        const auto& ep = episodes[ep_idx];
         bool is_watched = watched.find(ep.number) != watched.end();
         if (is_watched) watched_count++;
 
@@ -51,32 +53,40 @@ static void populate_episodes(DetailsContext* ctx, const std::vector<Episode>& e
         gtk_box_append(GTK_BOX(row), title_lbl);
 
         // Play Button
-        GtkWidget* play_btn = gtk_button_new_with_label("▶ Дивитись");
+        GtkWidget* play_btn = gtk_button_new_with_label("Дивитись");
         gtk_widget_add_css_class(play_btn, "suggested-action");
 
         struct PlayData {
-            Anime anime;
-            Episode ep;
-            std::shared_ptr<BaseProvider> provider;
+            DetailsContext* ctx;
+            std::vector<Episode> all_episodes;
+            size_t episode_idx;
             GtkWidget* mark_lbl;
         };
-        auto* pd = new PlayData{ctx->anime, ep, ctx->provider, mark_lbl};
+        auto* pd = new PlayData{ctx, episodes, ep_idx, mark_lbl};
 
         g_signal_connect_data(
             play_btn, "clicked",
             G_CALLBACK(+[](GtkButton*, gpointer user_data) {
                 auto* d = static_cast<PlayData*>(user_data);
-                if (!d || !d->provider) return;
-                Anime a = d->anime;
-                Episode ep = d->ep;
-                auto prov = d->provider;
+                if (!d || !d->ctx || !d->ctx->provider) return;
+
+                if (d->ctx->on_play_episode && PlayerService::get_player_mode() == PlayerMode::Embedded) {
+                    if (GTK_IS_LABEL(d->mark_lbl)) gtk_label_set_text(GTK_LABEL(d->mark_lbl), "✓");
+                    d->ctx->on_play_episode(d->ctx->anime, d->all_episodes, d->episode_idx, d->ctx->provider);
+                    return;
+                }
+
+                // External MPV
+                Anime a = d->ctx->anime;
+                Episode ep = d->all_episodes[d->episode_idx];
+                auto prov = d->ctx->provider;
                 GtkWidget* lbl = d->mark_lbl;
                 std::thread([a = std::move(a), ep = std::move(ep), prov = std::move(prov), lbl]() {
                     try {
                         Stream s = prov->get_stream(a, ep);
                         const Quality* q = s.best();
                         if (q) {
-                            PlayerService::play(*q, a.title_ru, &ep);
+                            PlayerService::play_external(*q, a.title_ru, &ep);
                             HistoryManager::mark_watched(a.provider, a.id, ep.number);
                             g_idle_add(+[](gpointer p) -> gboolean {
                                 auto* mark = static_cast<GtkWidget*>(p);
@@ -97,7 +107,8 @@ static void populate_episodes(DetailsContext* ctx, const std::vector<Episode>& e
         gtk_box_append(GTK_BOX(row), play_btn);
 
         // Download Button
-        GtkWidget* dl_btn = gtk_button_new_with_label("⬇");
+        GtkWidget* dl_btn = gtk_button_new_from_icon_name("document-save-symbolic");
+        gtk_widget_set_tooltip_text(dl_btn, "Завантажити");
         struct DlData {
             Anime anime;
             Episode ep;
@@ -121,7 +132,7 @@ static void populate_episodes(DetailsContext* ctx, const std::vector<Episode>& e
                         Stream s = prov->get_stream(a, ep);
                         const Quality* q = s.best();
                         if (q) {
-                            DownloadService::instance().start_download(a, ep, q->label, q->url);
+                            DownloadService::instance().start_download(a, ep, q->label, q->url, q->headers);
                         }
                     } catch (const std::exception& ex) {
                         std::cerr << "[DetailsView] Download stream error: " << ex.what() << "\n";
@@ -166,7 +177,8 @@ static gboolean on_episodes_loaded(gpointer user_data) {
 GtkWidget* DetailsView::create(
     const Anime& anime,
     std::shared_ptr<BaseProvider> provider,
-    std::function<void()> on_back
+    std::function<void()> on_back,
+    OnPlayEpisodeCallback on_play_episode
 ) {
     GtkWidget* root_overlay = gtk_overlay_new();
     gtk_widget_set_vexpand(root_overlay, TRUE);
@@ -203,17 +215,17 @@ GtkWidget* DetailsView::create(
     GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
     gtk_widget_set_vexpand(main_box, TRUE);
     gtk_widget_set_hexpand(main_box, TRUE);
-    gtk_widget_set_margin_start(main_box, 24);
-    gtk_widget_set_margin_end(main_box, 24);
-    gtk_widget_set_margin_top(main_box, 20);
-    gtk_widget_set_margin_bottom(main_box, 32);
+    gtk_widget_set_margin_start(main_box, 36);
+    gtk_widget_set_margin_end(main_box, 36);
+    gtk_widget_set_margin_top(main_box, 24);
+    gtk_widget_set_margin_bottom(main_box, 36);
 
     gtk_overlay_add_overlay(GTK_OVERLAY(root_overlay), main_box);
 
     // Top action bar
     GtkWidget* top_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
 
-    GtkWidget* back_btn = gtk_button_new_with_label("← Назад до каталогу");
+    GtkWidget* back_btn = gtk_button_new_with_label("Назад");
     auto* back_cb = new std::function<void()>(std::move(on_back));
     g_signal_connect_data(
         back_btn, "clicked",
@@ -229,7 +241,7 @@ GtkWidget* DetailsView::create(
 
     // Favorite button
     bool is_fav = FavoritesManager::is_favorite(anime.provider, anime.id);
-    GtkWidget* fav_btn = gtk_button_new_with_label(is_fav ? "★ В улюблених" : "☆ Додати в улюблені");
+    GtkWidget* fav_btn = gtk_button_new_with_label(is_fav ? "В улюблених" : "Додати в улюблені");
     struct FavData { Anime anime; GtkWidget* btn; };
     auto* fd = new FavData{anime, fav_btn};
     g_signal_connect_data(
@@ -237,7 +249,7 @@ GtkWidget* DetailsView::create(
         G_CALLBACK(+[](GtkButton*, gpointer user_data) {
             auto* d = static_cast<FavData*>(user_data);
             bool added = FavoritesManager::toggle_favorite(d->anime);
-            gtk_button_set_label(GTK_BUTTON(d->btn), added ? "★ В улюблених" : "☆ Додати в улюблені");
+            gtk_button_set_label(GTK_BUTTON(d->btn), added ? "В улюблених" : "Додати в улюблені");
         }),
         fd,
         [](gpointer data, GClosure*) { delete static_cast<FavData*>(data); },
@@ -252,7 +264,7 @@ GtkWidget* DetailsView::create(
     gtk_widget_set_vexpand(scrolled, TRUE);
     gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), FALSE);
 
-    GtkWidget* content_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 28);
+    GtkWidget* content_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 32);
     gtk_widget_set_margin_bottom(content_box, 80);
 
     // Left column: Poster & Meta
@@ -368,7 +380,7 @@ GtkWidget* DetailsView::create(
     gtk_box_append(GTK_BOX(main_box), scrolled);
 
     // Fetch episodes in thread
-    auto* ctx = new DetailsContext{anime, provider, eps_box, spinner, prog_lbl, fav_btn};
+    auto* ctx = new DetailsContext{anime, provider, eps_box, spinner, prog_lbl, fav_btn, std::move(on_play_episode)};
     std::thread([ctx]() {
         auto eps = ctx->provider->get_episodes(ctx->anime);
         auto* data = new EpisodesLoadedData{ctx, std::move(eps)};

@@ -25,7 +25,7 @@ size_t file_write_callback(void* ptr, size_t size, size_t nmemb, FILE* stream) {
 
 namespace anime::http {
 
-Response Client::get(const std::string& url, const std::map<std::string, std::string>& headers, int timeout_sec) {
+Response Client::get(const std::string& url, const std::map<std::string, std::string>& headers, int timeout_sec, const std::string& cookie_file) {
 #ifdef HAVE_LIBCURL
     Response resp;
     CURL* curl = curl_easy_init();
@@ -38,6 +38,11 @@ Response Client::get(const std::string& url, const std::map<std::string, std::st
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec));
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0");
+
+    if (!cookie_file.empty()) {
+        curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookie_file.c_str());
+        curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookie_file.c_str());
+    }
 
     struct curl_slist* chunk = nullptr;
     for (const auto& [k, v] : headers) {
@@ -66,6 +71,9 @@ Response Client::get(const std::string& url, const std::map<std::string, std::st
     Response resp;
     std::ostringstream cmd;
     cmd << "curl -s -L --max-time " << timeout_sec << " -A \"Mozilla/5.0 (X11; Linux x86_64)\" ";
+    if (!cookie_file.empty()) {
+        cmd << "-b \"" << cookie_file << "\" -c \"" << cookie_file << "\" ";
+    }
     for (const auto& [k, v] : headers) {
         cmd << "-H \"" << k << ": " << v << "\" ";
     }
@@ -101,7 +109,7 @@ Response Client::get(const std::string& url, const std::map<std::string, std::st
 #endif
 }
 
-Response Client::post(const std::string& url, const std::string& data, const std::map<std::string, std::string>& headers, int timeout_sec) {
+Response Client::post(const std::string& url, const std::string& data, const std::map<std::string, std::string>& headers, int timeout_sec, const std::string& cookie_file) {
 #ifdef HAVE_LIBCURL
     Response resp;
     CURL* curl = curl_easy_init();
@@ -116,6 +124,11 @@ Response Client::post(const std::string& url, const std::string& data, const std
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec));
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0");
+
+    if (!cookie_file.empty()) {
+        curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookie_file.c_str());
+        curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookie_file.c_str());
+    }
 
     struct curl_slist* chunk = nullptr;
     for (const auto& [k, v] : headers) {
@@ -143,6 +156,9 @@ Response Client::post(const std::string& url, const std::string& data, const std
     Response resp;
     std::ostringstream cmd;
     cmd << "curl -s -L --max-time " << timeout_sec << " -A \"Mozilla/5.0 (X11; Linux x86_64)\" ";
+    if (!cookie_file.empty()) {
+        cmd << "-b \"" << cookie_file << "\" -c \"" << cookie_file << "\" ";
+    }
     for (const auto& [k, v] : headers) {
         cmd << "-H \"" << k << ": " << v << "\" ";
     }
@@ -178,15 +194,15 @@ Response Client::post(const std::string& url, const std::string& data, const std
 #endif
 }
 
-std::future<Response> Client::get_async(std::string url, std::map<std::string, std::string> headers, int timeout_sec) {
-    return std::async(std::launch::async, [url = std::move(url), headers = std::move(headers), timeout_sec]() {
-        return get(url, headers, timeout_sec);
+std::future<Response> Client::get_async(std::string url, std::map<std::string, std::string> headers, int timeout_sec, std::string cookie_file) {
+    return std::async(std::launch::async, [url = std::move(url), headers = std::move(headers), timeout_sec, cookie_file = std::move(cookie_file)]() {
+        return get(url, headers, timeout_sec, cookie_file);
     });
 }
 
-std::future<Response> Client::post_async(std::string url, std::string data, std::map<std::string, std::string> headers, int timeout_sec) {
-    return std::async(std::launch::async, [url = std::move(url), data = std::move(data), headers = std::move(headers), timeout_sec]() {
-        return post(url, data, headers, timeout_sec);
+std::future<Response> Client::post_async(std::string url, std::string data, std::map<std::string, std::string> headers, int timeout_sec, std::string cookie_file) {
+    return std::async(std::launch::async, [url = std::move(url), data = std::move(data), headers = std::move(headers), timeout_sec, cookie_file = std::move(cookie_file)]() {
+        return post(url, data, headers, timeout_sec, cookie_file);
     });
 }
 

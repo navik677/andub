@@ -13,7 +13,7 @@ static void on_activate(GtkApplication* app, gpointer) {
 
 GtkApplication* Application::create() {
     GtkApplication* app = gtk_application_new(
-        "io.github.navik677.anime-gui",
+        "io.github.navik677.andub",
         G_APPLICATION_DEFAULT_FLAGS
     );
 
