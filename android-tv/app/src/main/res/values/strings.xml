@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Andub</string>
+    <string name="app_brand">ANDUB</string>
+    <string name="provider_anitube">AniTube (UA)</string>
+    <string name="provider_anilibria">АніЛібрія</string>
+    <string name="provider_dreamcast">Dream Cast</string>
+    <string name="provider_anibaza">AniBaza</string>
+    <string name="provider_anidub">AniDub</string>
+    <string name="provider_shizaproject">Shiza Project</string>
+    <string name="provider_animevost">AnimeVost</string>
+
+    <string name="header_popular">Популярне</string>
+    <string name="header_latest">Останні релізи</string>
+    <string name="header_catalog">Головний каталог</string>
+    <string name="header_genres">Жанри</string>
+    <string name="header_favorites">Улюблені</string>
+    <string name="header_history">Історія переглядів</string>
+    <string name="header_providers">Джерела / Провайдери</string>
+    <string name="header_episodes">Серії</string>
+
+    <string name="search_hint">Пошук аніме...</string>
+    <string name="action_play">Дивитись</string>
+    <string name="action_favorites">В улюблені</string>
+    <string name="watch_now">Дивитися</string>
+    <string name="add_to_fav">В улюблені</string>
+    <string name="in_fav">В улюблених</string>
+    <string name="episodes">Серії</string>
+    <string name="episode_prefix">Серія</string>
+    <string name="quality">Якість</string>
+    <string name="audio_track">Озвучення</string>
+    <string name="subtitles">Субтитри</string>
+</resources>

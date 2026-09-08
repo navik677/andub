@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Anime Poster Card Dimensions (standard cinematic 2:3 ratio) -->
+    <dimen name="card_width">152dp</dimen>
+    <dimen name="card_height">228dp</dimen>
+
+    <!-- Leanback Browse Layout Spacing: gives safe room for top header bar -->
+    <dimen name="browse_rows_margin_top">116dp</dimen>
+    <dimen name="lb_browse_rows_margin_top">116dp</dimen>
+    <dimen name="lb_browse_padding_top">16dp</dimen>
+    <dimen name="lb_browse_padding_start">48dp</dimen>
+    <dimen name="lb_browse_padding_end">48dp</dimen>
+    <dimen name="lb_browse_padding_bottom">36dp</dimen>
+
+    <dimen name="detail_banner_height">320dp</dimen>
+</resources>

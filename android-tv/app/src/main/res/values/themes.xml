@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.Andub.TV" parent="@style/Theme.Leanback.Browse">
+        <item name="browseTitleViewLayout">@layout/title_view</item>
+        <item name="browseRowsMarginTop">@dimen/browse_rows_margin_top</item>
+        <item name="rowHeaderStyle">@style/AndubRowHeaderStyle</item>
+        <item name="defaultBrandColor">@color/accent_blue</item>
+        <item name="defaultSearchColor">@color/search_orb_color</item>
+        <item name="defaultSearchBrightColor">@color/search_orb_bright</item>
+        <item name="defaultSearchIconColor">@color/search_orb_icon</item>
+        <item name="android:windowBackground">@color/bg_main</item>
+    </style>
+
+    <style name="AndubRowHeaderStyle" parent="@style/Widget.Leanback.Row.Header">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:paddingBottom">4dp</item>
+    </style>
+
+    <style name="Theme.Andub.TV.Details" parent="@style/Theme.Leanback.Details">
+        <item name="defaultBrandColor">@color/accent_blue</item>
+        <item name="android:windowBackground">@color/bg_main</item>
+    </style>
+
+    <style name="RoundedCorner10">
+        <item name="cornerSize">10dp</item>
+    </style>
+
+</resources>

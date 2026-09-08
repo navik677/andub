@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0b0c10">
+
+    <!-- Ambient Blurred Background -->
+    <ImageView
+        android:id="@+id/iv_ambient_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop" />
+
+    <!-- Dark Cinematic Vignette Overlay -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_details_vignette" />
+
+    <!-- Main Content Container -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingStart="40dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="40dp"
+        android:paddingBottom="20dp">
+
+        <!-- Top Action Bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_back"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_button_pc_pill"
+                android:clickable="true"
+                android:focusable="true"
+                android:minWidth="80dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="Назад"
+                android:textAllCaps="false"
+                android:textColor="#f8fafc"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btn_favorite"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="12dp"
+                android:background="@drawable/bg_button_pc_pill"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="Додати в улюблені"
+                android:textAllCaps="false"
+                android:textColor="#f8fafc"
+                android:textSize="13sp" />
+
+        </LinearLayout>
+
+        <!-- Two Columns Container -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="16dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+
+            <!-- Left Column: Poster & Genres -->
+            <LinearLayout
+                android:layout_width="210dp"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/iv_poster"
+                    android:layout_width="210dp"
+                    android:layout_height="295dp"
+                    android:background="#151821"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearanceOverlay="@style/RoundedCorner10" />
+
+                <androidx.gridlayout.widget.GridLayout
+                    android:id="@+id/grid_genres"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    app:alignmentMode="alignMargins"
+                    app:columnCount="2"
+                    app:rowOrderPreserved="false"
+                    app:useDefaultMargins="false" />
+
+            </LinearLayout>
+
+            <!-- Right Column: Metadata & Episodes List -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="32dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <!-- Title -->
+                <TextView
+                    android:id="@+id/tv_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:text="Назва аніме"
+                    android:textColor="#f8fafc"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <!-- Original Title -->
+                <TextView
+                    android:id="@+id/tv_orig_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="Original Anime Title"
+                    android:textColor="#94a3b8"
+                    android:textSize="13sp" />
+
+                <!-- Badge Row (Year, Rating, Provider, Type) -->
+                <LinearLayout
+                    android:id="@+id/layout_badges"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/badge_year"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_badge_pill"
+                        android:text="2026"
+                        android:textColor="#94a3b8"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/badge_rating"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_badge_pill"
+                        android:text="★ 8.5"
+                        android:textColor="#f59e0b"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/badge_provider"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_badge_pill"
+                        android:text="AniTube"
+                        android:textColor="#38bdf8"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/badge_type"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_pill"
+                        android:text="TV"
+                        android:textColor="#94a3b8"
+                        android:textSize="11sp" />
+
+                </LinearLayout>
+
+                <!-- Description -->
+                <TextView
+                    android:id="@+id/tv_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:ellipsize="end"
+                    android:lineSpacingMultiplier="1.25"
+                    android:maxLines="4"
+                    android:text="Опис аніме..."
+                    android:textColor="#cbd5e1"
+                    android:textSize="12sp" />
+
+                <!-- Divider Line -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="10dp"
+                    android:background="#1e2433" />
+
+                <!-- Episode Header -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tv_episodes_header"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Список серій:  Переглянуто: 0 / 0"
+                        android:textColor="#94a3b8"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <ProgressBar
+                        android:id="@+id/pb_episodes_loading"
+                        style="?android:attr/progressBarStyleSmall"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:visibility="gone" />
+
+                </LinearLayout>
+
+                <!-- Vertical Episodes List -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rv_episodes"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_weight="1"
+                    android:clipToPadding="false"
+                    android:focusable="true"
+                    android:paddingBottom="16dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>
