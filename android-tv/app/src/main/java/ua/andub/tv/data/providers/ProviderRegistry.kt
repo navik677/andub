@@ -9,7 +9,8 @@ object ProviderRegistry {
         AniBazaProvider(),
         AniDubProvider(),
         ShizaProjectProvider(),
-        AnimeVostProvider()
+        AnimeVostProvider(),
+        AniStarProvider()
     )
 
     private val providerMap = providers.associateBy { it.name }

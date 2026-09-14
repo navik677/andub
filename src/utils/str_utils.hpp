@@ -2,6 +2,9 @@
 
 #include <string>
 #include <cstring>
+#include <sstream>
+#include <iomanip>
+#include <cctype>
 #include <glib.h>
 
 namespace anime::utils {
@@ -34,6 +37,49 @@ inline std::string trim(const std::string& str) {
     if (start == std::string::npos) return "";
     auto end = str.find_last_not_of(" \t\r\n");
     return str.substr(start, end - start + 1);
+}
+
+inline std::string cp1251_to_utf8(const std::string& input) {
+    if (input.empty()) return "";
+    GError* err = nullptr;
+    gsize bytes_written = 0;
+    gchar* conv = g_convert(input.data(), static_cast<gssize>(input.size()),
+                            "UTF-8", "WINDOWS-1251", nullptr, &bytes_written, &err);
+    if (err) {
+        g_error_free(err);
+        return input;
+    }
+    std::string res(conv, bytes_written);
+    g_free(conv);
+    return res;
+}
+
+inline std::string utf8_to_cp1251(const std::string& input) {
+    if (input.empty()) return "";
+    GError* err = nullptr;
+    gsize bytes_written = 0;
+    gchar* conv = g_convert(input.data(), static_cast<gssize>(input.size()),
+                            "WINDOWS-1251", "UTF-8", nullptr, &bytes_written, &err);
+    if (err) {
+        g_error_free(err);
+        return input;
+    }
+    std::string res(conv, bytes_written);
+    g_free(conv);
+    return res;
+}
+
+inline std::string cp1251_url_encode(const std::string& utf8_str) {
+    std::string cp1251 = utf8_to_cp1251(utf8_str);
+    std::ostringstream escaped;
+    for (unsigned char c : cp1251) {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            escaped << c;
+        } else {
+            escaped << '%' << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << (int)c;
+        }
+    }
+    return escaped.str();
 }
 
 } // namespace anime::utils

@@ -9,6 +9,7 @@
 #include "../providers/anidub_provider.hpp"
 #include "../providers/anitube_provider.hpp"
 #include "../providers/animevost_provider.hpp"
+#include "../providers/anistar_provider.hpp"
 #include "../providers/dreamcast_provider.hpp"
 #include "../services/favorites_manager.hpp"
 #include "../services/player_service.hpp"
@@ -58,7 +59,8 @@ static const std::vector<std::string> RUSSIAN_GENRES = {
     "Фэнтези",
     "Школа",
     "Экшен",
-    "Этти"
+    "Этти",
+    "Хентай"
 };
 
 struct AppState {
@@ -577,7 +579,8 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
         std::make_shared<AniBazaProvider>(),
         std::make_shared<AniDubProvider>(),
         std::make_shared<AniTubeProvider>(),
-        std::make_shared<AnimeVostProvider>()
+        std::make_shared<AnimeVostProvider>(),
+        std::make_shared<AniStarProvider>()
     };
 
     // HeaderBar

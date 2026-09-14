@@ -40,7 +40,7 @@ class SearchTvFragment : SearchSupportFragment(), SearchSupportFragment.SearchRe
         val ALL_GENRES = listOf(
             "Екшн", "Комедія", "Фентезі", "Романтика", "Пригоди", "Драма",
             "Сьонен", "Детектив", "Жахи", "Містика", "Спорт", "Фантастика",
-            "Повсякденність", "Трилер", "Школа", "Ісекай", "Меха", "Магія"
+            "Повсякденність", "Трилер", "Школа", "Ісекай", "Меха", "Магія", "Хентай"
         )
 
         fun newInstance(genre: String? = null, initialQuery: String? = null): SearchTvFragment {

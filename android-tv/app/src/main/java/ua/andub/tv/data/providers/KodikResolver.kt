@@ -229,6 +229,9 @@ object KodikResolver {
                             if (rawSrc.isNotEmpty()) {
                                 var directUrl = decodeKodikLink(rawSrc)
                                 if (directUrl.startsWith("//")) directUrl = "https:$directUrl"
+                                if (directUrl.contains(":hls:manifest.m3u8")) {
+                                    directUrl = directUrl.substringBefore(":hls:manifest.m3u8")
+                                }
                                 
                                 // Resolve 302 redirect (cloud.solodcdn.com -> green.cloud.solodcdn.com)
                                 val finalUrl = resolveFinalCdnUrl(directUrl, "https://$pd/")

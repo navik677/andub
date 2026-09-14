@@ -147,6 +147,7 @@ GtkWidget* AnimeCard::create(const Anime& anime, std::function<void(const Anime&
         else if (prov_name == "anidub") prov_name = "AniDub";
         else if (prov_name == "anitube") prov_name = "AniTube UA";
         else if (prov_name == "dreamcast") prov_name = "Dream Cast";
+        else if (prov_name == "anistar") prov_name = "AniStar";
         GtkWidget* prov_lbl = gtk_label_new(prov_name.c_str());
         gtk_widget_add_css_class(prov_lbl, "card-prov-chip");
         gtk_box_append(GTK_BOX(meta_box), prov_lbl);
