@@ -22,6 +22,33 @@ static std::string url_encode(const std::string& value) {
     return escaped.str();
 }
 
+static std::string url_decode(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        if (in[i] == '%' && i + 2 < in.size()) {
+            auto hex_val = [](char c) -> int {
+                if (c >= '0' && c <= '9') return c - '0';
+                if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                return -1;
+            };
+            int v1 = hex_val(in[i + 1]);
+            int v2 = hex_val(in[i + 2]);
+            if (v1 != -1 && v2 != -1) {
+                out.push_back(static_cast<char>((v1 << 4) | v2));
+                i += 2;
+                continue;
+            }
+        } else if (in[i] == '+') {
+            out.push_back(' ');
+            continue;
+        }
+        out.push_back(in[i]);
+    }
+    return out;
+}
+
 static char rot18_char(char c) {
     if (c >= 'a' && c <= 'z') {
         return static_cast<char>((c - 'a' + 18) % 26 + 'a');
@@ -76,13 +103,13 @@ static std::string decode_kodik_link(const std::string& raw) {
     return decoded;
 }
 
-std::vector<int> KodikResolver::get_episodes(const std::string& raw_kodik_url) {
+std::vector<int> KodikResolver::get_episodes(const std::string& raw_kodik_url, const std::string& referer) {
     std::string url = raw_kodik_url;
     if (url.rfind("//", 0) == 0) url = "https:" + url;
 
     std::map<std::string, std::string> headers = {
         {"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-        {"Referer", "https://shizaproject.com/"}
+        {"Referer", referer.empty() ? "https://kodikplayer.com/" : referer}
     };
 
     auto resp = http::Client::get(url, headers);
@@ -114,14 +141,14 @@ std::vector<int> KodikResolver::get_episodes(const std::string& raw_kodik_url) {
     return episodes;
 }
 
-Stream KodikResolver::resolve(const std::string& raw_kodik_url, int episode_num) {
+Stream KodikResolver::resolve(const std::string& raw_kodik_url, int episode_num, const std::string& referer) {
     Stream stream;
     std::string url = raw_kodik_url;
     if (url.rfind("//", 0) == 0) url = "https:" + url;
 
     std::map<std::string, std::string> headers = {
         {"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-        {"Referer", "https://shizaproject.com/"}
+        {"Referer", referer.empty() ? "https://kodikplayer.com/" : referer}
     };
 
     auto resp = http::Client::get(url, headers);
@@ -133,26 +160,49 @@ Stream KodikResolver::resolve(const std::string& raw_kodik_url, int episode_num)
     const std::string& html = resp.body;
 
     std::smatch m;
-    std::string domain, d_sign, pd, pd_sign, ref, ref_sign;
+    std::string domain, d_sign, pd = "kodikplayer.com", pd_sign, ref, ref_sign;
 
-    std::regex d_re(R"raw(var\s+domain\s*=\s*[\"\']([^\"\']+)[\"\'])raw");
-    if (std::regex_search(html, m, d_re)) domain = m[1].str();
+    // 1. Check for urlParams JSON object
+    std::regex url_params_re(R"raw(urlParams\s*=\s*['"]([^'"]+)['"])raw");
+    if (std::regex_search(html, m, url_params_re)) {
+        try {
+            auto params_json = json::Value::parse(m[1].str());
+            domain = params_json["d"].get_str();
+            d_sign = params_json["d_sign"].get_str();
+            std::string parsed_pd = params_json["pd"].get_str();
+            if (!parsed_pd.empty()) pd = parsed_pd;
+            pd_sign = params_json["pd_sign"].get_str();
+            ref = params_json["ref"].get_str();
+            ref_sign = params_json["ref_sign"].get_str();
+        } catch (...) {}
+    }
 
-    std::regex ds_re(R"raw(var\s+d_sign\s*=\s*[\"\']([^\"\']+)[\"\'])raw");
-    if (std::regex_search(html, m, ds_re)) d_sign = m[1].str();
+    // 2. Fallback regexes if urlParams was incomplete
+    if (domain.empty()) {
+        std::regex d_re(R"raw(var\s+domain\s*=\s*[\"\']([^\"\']+)[\"\'])raw");
+        if (std::regex_search(html, m, d_re)) domain = m[1].str();
+    }
+    if (d_sign.empty()) {
+        std::regex ds_re(R"raw(var\s+d_sign\s*=\s*[\"\']([^\"\']+)[\"\'])raw");
+        if (std::regex_search(html, m, ds_re)) d_sign = m[1].str();
+    }
+    if (pd_sign.empty()) {
+        std::regex pds_re(R"raw(var\s+pd_sign\s*=\s*[\"\']([^\"\']+)[\"\'])raw");
+        if (std::regex_search(html, m, pds_re)) pd_sign = m[1].str();
+    }
+    if (ref.empty()) {
+        std::regex ref_re(R"raw(var\s+ref\s*=\s*[\"\']([^\"\']*)[\"\'])raw");
+        if (std::regex_search(html, m, ref_re)) ref = m[1].str();
+    }
+    if (ref_sign.empty()) {
+        std::regex refs_re(R"raw(var\s+ref_sign\s*=\s*[\"\']([^\"\']*)[\"\'])raw");
+        if (std::regex_search(html, m, refs_re)) ref_sign = m[1].str();
+    }
 
-    std::regex pd_re(R"raw(var\s+pd\s*=\s*[\"\']([^\"\']+)[\"\'])raw");
-    if (std::regex_search(html, m, pd_re)) pd = m[1].str();
-    if (pd.empty()) pd = "kodikplayer.com";
-
-    std::regex pds_re(R"raw(var\s+pd_sign\s*=\s*[\"\']([^\"\']+)[\"\'])raw");
-    if (std::regex_search(html, m, pds_re)) pd_sign = m[1].str();
-
-    std::regex ref_re(R"raw(var\s+ref\s*=\s*[\"\']([^\"\']*)[\"\'])raw");
-    if (std::regex_search(html, m, ref_re)) ref = m[1].str();
-
-    std::regex refs_re(R"raw(var\s+ref_sign\s*=\s*[\"\']([^\"\']*)[\"\'])raw");
-    if (std::regex_search(html, m, refs_re)) ref_sign = m[1].str();
+    // Decode URL-encoded ref if needed (e.g. https%3A%2F%2Fshizaproject.com%2F)
+    if (ref.find('%') != std::string::npos) {
+        ref = url_decode(ref);
+    }
 
     std::string vid_id, vid_hash, vid_type = "seria";
 
@@ -171,7 +221,7 @@ Stream KodikResolver::resolve(const std::string& raw_kodik_url, int episode_num)
         }
     }
 
-    // Fallback to vInfo if options not found (e.g. single video /uv/)
+    // Fallback to vInfo if options not found (e.g. single video /uv/ or /seria/)
     if (vid_id.empty() || vid_hash.empty()) {
         std::regex vi_id(R"raw(vInfo\.id\s*=\s*[\"\']([^\"\']+)[\"\'])raw");
         if (std::regex_search(html, m, vi_id)) vid_id = m[1].str();
@@ -181,6 +231,15 @@ Stream KodikResolver::resolve(const std::string& raw_kodik_url, int episode_num)
 
         std::regex vi_type(R"raw(vInfo\.type\s*=\s*[\"\']([^\"\']+)[\"\'])raw");
         if (std::regex_search(html, m, vi_type)) vid_type = m[1].str();
+    }
+
+    // Fallback to serialId / serialHash
+    if (vid_id.empty() || vid_hash.empty()) {
+        std::regex s_id(R"raw(serialId\s*=\s*Number\((\d+)\))raw");
+        if (std::regex_search(html, m, s_id)) vid_id = m[1].str();
+
+        std::regex s_hash(R"raw(serialHash\s*=\s*[\"\']([^\"\']+)[\"\'])raw");
+        if (std::regex_search(html, m, s_hash)) vid_hash = m[1].str();
     }
 
     if (vid_id.empty() || vid_hash.empty()) {
@@ -230,6 +289,10 @@ Stream KodikResolver::resolve(const std::string& raw_kodik_url, int episode_num)
             std::string raw_src = q_arr[0]["src"].get_str();
             if (!raw_src.empty()) {
                 std::string direct_url = decode_kodik_link(raw_src);
+                auto hls_pos = direct_url.find(":hls:manifest.m3u8");
+                if (hls_pos != std::string::npos) {
+                    direct_url = direct_url.substr(0, hls_pos);
+                }
                 Quality q;
                 q.label = q_label + "p";
                 q.url = direct_url;
@@ -251,6 +314,10 @@ Stream KodikResolver::resolve(const std::string& raw_kodik_url, int episode_num)
             std::string raw_src = v[0]["src"].get_str();
             if (!raw_src.empty()) {
                 std::string direct_url = decode_kodik_link(raw_src);
+                auto hls_pos = direct_url.find(":hls:manifest.m3u8");
+                if (hls_pos != std::string::npos) {
+                    direct_url = direct_url.substr(0, hls_pos);
+                }
                 Quality q;
                 q.label = k + "p";
                 q.url = direct_url;

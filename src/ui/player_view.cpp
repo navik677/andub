@@ -2,7 +2,11 @@
 #include "../services/player_service.hpp"
 #include "../services/history_manager.hpp"
 #include "../utils/str_utils.hpp"
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 #include <locale.h>
 #include <iostream>
 #include <iomanip>
@@ -17,6 +21,27 @@
 namespace anime::ui {
 
 static void* get_proc_address_mpv(void*, const char* name) {
+#ifdef _WIN32
+    static HMODULE hEGL = LoadLibraryA("libEGL.dll");
+    if (hEGL) {
+        auto egl_gpa = (void*(*)(const char*))GetProcAddress(hEGL, "eglGetProcAddress");
+        if (egl_gpa) {
+            void* p = egl_gpa(name);
+            if (p) return p;
+        }
+    }
+    static HMODULE hGL = LoadLibraryA("opengl32.dll");
+    if (hGL) {
+        auto wgl_gpa = (void*(*)(const char*))GetProcAddress(hGL, "wglGetProcAddress");
+        if (wgl_gpa) {
+            void* p = wgl_gpa(name);
+            if (p) return p;
+        }
+        void* p = (void*)GetProcAddress(hGL, name);
+        if (p) return p;
+    }
+    return nullptr;
+#else
     static void* egl_handle = dlopen("libEGL.so.1", RTLD_LAZY);
     static auto egl_gpa = egl_handle ? (void*(*)(const char*))dlsym(egl_handle, "eglGetProcAddress") : nullptr;
     if (egl_gpa) {
@@ -24,6 +49,7 @@ static void* get_proc_address_mpv(void*, const char* name) {
         if (p) return p;
     }
     return dlsym(RTLD_DEFAULT, name);
+#endif
 }
 
 static std::string format_time(double seconds) {
@@ -78,14 +104,18 @@ struct PlayerState {
     bool is_seeking = false;
     double seek_target = 0;
     guint seek_debounce_id = 0;
+    guint click_timer_id = 0;
     guint inhibit_cookie = 0;
     double last_mouse_x = -1.0;
     double last_mouse_y = -1.0;
     bool is_fullscreen = false;
     bool auto_advance_triggered = false;
+    bool controls_hovered = false;
     guint timer_id = 0;
     guint osd_timeout_id = 0;
     guint autohide_id = 0;
+
+    std::shared_ptr<std::atomic<bool>> is_alive = std::make_shared<std::atomic<bool>>(true);
 
     Stream current_stream;
     std::string current_stream_url;
@@ -149,31 +179,90 @@ static void toggle_pause(PlayerState* state) {
     show_osd(state, new_paused ? "Пауза" : "Відтворення");
 }
 
+static void execute_seek(PlayerState* state, double target, bool is_backward) {
+    if (!state || !state->mpv) return;
+
+    std::string tgt_str = std::to_string(target);
+    const char* cmd[] = {"seek", tgt_str.c_str(), "absolute", nullptr};
+    mpv_command_async(state->mpv, 0, cmd);
+
+    if (is_backward) {
+        // Workaround for libopenh264 delayed DPB buffer bug across flushes:
+        // Cycling the video track forces libopenh264 teardown and re-creation at seek position,
+        // preventing audio from remaining desynchronized at the pre-seek timestamp.
+        const char* v_off[] = {"set", "vid", "no", nullptr};
+        mpv_command_async(state->mpv, 0, v_off);
+        const char* v_on[] = {"set", "vid", "auto", nullptr};
+        mpv_command_async(state->mpv, 0, v_on);
+    }
+}
+
+static void adjust_volume(PlayerState* state, double delta) {
+    if (!state || !state->mpv) return;
+    double vol = 100.0;
+    mpv_get_property(state->mpv, "volume", MPV_FORMAT_DOUBLE, &vol);
+    vol += delta;
+    if (vol < 0.0) vol = 0.0;
+    if (vol > 100.0) vol = 100.0;
+    mpv_set_property(state->mpv, "volume", MPV_FORMAT_DOUBLE, &vol);
+    int unmute = 0;
+    mpv_set_property(state->mpv, "mute", MPV_FORMAT_FLAG, &unmute);
+
+    if (state->vol_scale) {
+        gtk_range_set_value(GTK_RANGE(state->vol_scale), vol);
+    }
+    show_controls(state);
+    show_osd(state, "Гучність: " + std::to_string(static_cast<int>(vol)) + "%", 1000);
+}
+
+static void toggle_mute(PlayerState* state) {
+    if (!state || !state->mpv) return;
+    int mute = 0;
+    mpv_get_property(state->mpv, "mute", MPV_FORMAT_FLAG, &mute);
+    int new_mute = !mute;
+    mpv_set_property(state->mpv, "mute", MPV_FORMAT_FLAG, &new_mute);
+
+    if (state->vol_btn) {
+        gtk_button_set_icon_name(GTK_BUTTON(state->vol_btn), new_mute ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic");
+    }
+    show_controls(state);
+    show_osd(state, new_mute ? "Звук вимкнено" : "Звук увімкнено", 1000);
+}
+
 static void seek_relative(PlayerState* state, double offset_seconds, const std::string& osd_msg = "") {
     if (!state->mpv) return;
 
-    state->is_seeking = true;
-    double cur = 0;
-    int r = mpv_get_property(state->mpv, "time-pos", MPV_FORMAT_DOUBLE, &cur);
-    if (r == 0) {
-        double target = cur + offset_seconds;
-        if (target < 0.0) target = 0.0;
-        state->seek_target = target;
-        mpv_set_property_async(state->mpv, 0, "time-pos", MPV_FORMAT_DOUBLE, &target);
-        if (state->time_cur_lbl) {
-            gtk_label_set_text(GTK_LABEL(state->time_cur_lbl), format_time(target).c_str());
-        }
-        if (state->seek_scale) {
-            gtk_range_set_value(GTK_RANGE(state->seek_scale), target);
-        }
+    double base = 0;
+    if (state->is_seeking) {
+        base = state->seek_target;
     } else {
-        std::string off_str = std::to_string(static_cast<int>(offset_seconds));
-        const char* cmd[] = {"seek", off_str.c_str(), "relative", nullptr};
-        mpv_command_async(state->mpv, 0, cmd);
+        if (mpv_get_property(state->mpv, "time-pos", MPV_FORMAT_DOUBLE, &base) != 0) {
+            base = 0;
+        }
     }
 
+    double dur = 0;
+    mpv_get_property(state->mpv, "duration", MPV_FORMAT_DOUBLE, &dur);
+
+    double target = base + offset_seconds;
+    if (target < 0.0) target = 0.0;
+    if (dur > 0.0 && target > dur) target = dur;
+
+    state->is_seeking = true;
+    state->seek_target = target;
+
+    if (state->time_cur_lbl) {
+        gtk_label_set_text(GTK_LABEL(state->time_cur_lbl), format_time(target).c_str());
+    }
+    if (state->seek_scale) {
+        gtk_range_set_value(GTK_RANGE(state->seek_scale), target);
+    }
+
+    bool is_backward = (offset_seconds < 0.0);
+    execute_seek(state, target, is_backward);
+
     if (state->seek_debounce_id > 0) g_source_remove(state->seek_debounce_id);
-    state->seek_debounce_id = g_timeout_add(350, +[](gpointer data) -> gboolean {
+    state->seek_debounce_id = g_timeout_add(400, +[](gpointer data) -> gboolean {
         auto* st = static_cast<PlayerState*>(data);
         if (st) {
             st->seek_debounce_id = 0;
@@ -228,6 +317,9 @@ static void show_controls(PlayerState* state) {
     state->autohide_id = g_timeout_add_seconds(3, +[](gpointer data) -> gboolean {
         auto* s = static_cast<PlayerState*>(data);
         if (s && s->controls_overlay) {
+            if (s->controls_hovered) {
+                return G_SOURCE_CONTINUE;
+            }
             int paused = 0;
             if (s->mpv) mpv_get_property(s->mpv, "pause", MPV_FORMAT_FLAG, &paused);
             if (!paused && !s->is_seeking) {
@@ -254,6 +346,10 @@ static void on_mpv_update(void* ctx) {
         auto* st = static_cast<PlayerState*>(data);
         if (st) {
             st->render_queued.store(false);
+            if (st->spinner && gtk_widget_get_visible(st->spinner)) {
+                gtk_spinner_stop(GTK_SPINNER(st->spinner));
+                gtk_widget_set_visible(st->spinner, FALSE);
+            }
             if (st->gl_area && GTK_IS_GL_AREA(st->gl_area)) {
                 gtk_gl_area_queue_render(GTK_GL_AREA(st->gl_area));
             }
@@ -323,7 +419,12 @@ static gboolean on_gl_render(GtkGLArea* area, GdkGLContext*, gpointer user_data)
 
 static void on_gl_unrealize(GtkGLArea*, gpointer user_data) {
     auto* state = static_cast<PlayerState*>(user_data);
+    if (state->is_alive) *state->is_alive = false;
     update_inhibit(state, false);
+    if (state->click_timer_id > 0) {
+        g_source_remove(state->click_timer_id);
+        state->click_timer_id = 0;
+    }
     if (state->seek_debounce_id > 0) {
         g_source_remove(state->seek_debounce_id);
         state->seek_debounce_id = 0;
@@ -358,6 +459,14 @@ static void load_episode(PlayerState* state, size_t idx) {
 
     state->auto_advance_triggered = false;
 
+    // Immediately stop playback of old episode so audio does not leak while resolving new stream
+    if (state->mpv) {
+        int paused = 1;
+        mpv_set_property(state->mpv, "pause", MPV_FORMAT_FLAG, &paused);
+        const char* stop_cmd[] = {"stop", nullptr};
+        mpv_command_async(state->mpv, 0, stop_cmd);
+    }
+
     std::string ep_title = state->anime.title_ru;
     if (!ep.number.empty()) {
         ep_title += " — Серія " + ep.number;
@@ -385,15 +494,20 @@ static void load_episode(PlayerState* state, size_t idx) {
 
     HistoryManager::mark_watched(state->anime.provider, state->anime.id, ep.number);
 
-    std::thread([state, anime = state->anime, ep = ep, prov = state->provider]() {
+    std::thread([state, alive = state->is_alive, anime = state->anime, ep = ep, prov = state->provider]() {
         try {
             Stream s = prov->get_stream(anime, ep);
 
             g_idle_add(+[](gpointer data) -> gboolean {
-                auto* tuple = static_cast<std::pair<PlayerState*, Stream>*>(data);
-                auto* s_ptr = tuple->first;
-                s_ptr->current_stream = tuple->second;
+                auto* tuple = static_cast<std::tuple<PlayerState*, std::shared_ptr<std::atomic<bool>>, Stream>*>(data);
+                auto* s_ptr = std::get<0>(*tuple);
+                auto alive_ptr = std::get<1>(*tuple);
+                Stream st = std::move(std::get<2>(*tuple));
                 delete tuple;
+
+                if (!alive_ptr || !*alive_ptr || !s_ptr) return G_SOURCE_REMOVE;
+
+                s_ptr->current_stream = std::move(st);
 
                 const Quality* q = s_ptr->current_stream.best();
                 if (!q || q->url.empty()) {
@@ -408,7 +522,13 @@ static void load_episode(PlayerState* state, size_t idx) {
                     return G_SOURCE_REMOVE;
                 }
 
-                s_ptr->current_stream_url = q->url;
+                std::string stream_url = q->url;
+                auto hls_pos = stream_url.find(":hls:manifest.m3u8");
+                if (hls_pos != std::string::npos) {
+                    stream_url = stream_url.substr(0, hls_pos);
+                }
+
+                s_ptr->current_stream_url = stream_url;
                 if (s_ptr->quality_label) {
                     gtk_label_set_text(GTK_LABEL(s_ptr->quality_label), q->label.c_str());
                 }
@@ -416,10 +536,13 @@ static void load_episode(PlayerState* state, size_t idx) {
                 if (s_ptr->mpv) {
                     std::string headers_str;
                     std::string user_agent;
+                    std::string referrer_val;
                     for (const auto& [k, v] : q->headers) {
                         std::string lower_k = utils::utf8_tolower(k);
                         if (lower_k == "user-agent") {
                             user_agent = v;
+                        } else if (lower_k == "referer") {
+                            referrer_val = v;
                         } else {
                             if (!headers_str.empty()) headers_str += ",";
                             headers_str += k + ": " + v;
@@ -429,19 +552,16 @@ static void load_episode(PlayerState* state, size_t idx) {
                     if (!user_agent.empty()) {
                         mpv_set_property_string(s_ptr->mpv, "user-agent", user_agent.c_str());
                     }
+                    if (!referrer_val.empty()) {
+                        mpv_set_property_string(s_ptr->mpv, "referrer", referrer_val.c_str());
+                    }
                     if (!headers_str.empty()) {
                         mpv_set_property_string(s_ptr->mpv, "http-header-fields", headers_str.c_str());
                     } else {
                         mpv_set_property_string(s_ptr->mpv, "http-header-fields", "");
                     }
 
-                    if (q->url.find(".m3u8") != std::string::npos || !q->headers.empty()) {
-                        mpv_set_property_string(s_ptr->mpv, "ytdl", "no");
-                    } else {
-                        mpv_set_property_string(s_ptr->mpv, "ytdl", "yes");
-                    }
-
-                    const char* cmd[] = {"loadfile", q->url.c_str(), nullptr};
+                    const char* cmd[] = {"loadfile", stream_url.c_str(), nullptr};
                     mpv_command_async(s_ptr->mpv, 0, cmd);
 
                     int unpause = 0;
@@ -454,7 +574,7 @@ static void load_episode(PlayerState* state, size_t idx) {
                 }
 
                 return G_SOURCE_REMOVE;
-            }, new std::pair<PlayerState*, Stream>(state, std::move(s)));
+            }, new std::tuple<PlayerState*, std::shared_ptr<std::atomic<bool>>, Stream>(state, alive, std::move(s)));
         } catch (...) {}
     }).detach();
 }
@@ -482,16 +602,19 @@ GtkWidget* PlayerView::create(
         mpv_set_option_string(state->mpv, "vo", "libmpv");
         mpv_set_option_string(state->mpv, "hwdec", "auto-safe");
         mpv_set_option_string(state->mpv, "vd-lavc-threads", "4");
-        mpv_set_option_string(state->mpv, "vd-lavc-dr", "yes");
-        mpv_set_option_string(state->mpv, "video-timing-offset", "0");
-        mpv_set_option_string(state->mpv, "audio-buffer", "0.2");
+        // CRITICAL: Must be set BEFORE mpv_initialize() to prevent yt-dlp 20s timeout delay on video start
+        mpv_set_option_string(state->mpv, "ytdl", "no");
+        mpv_set_option_string(state->mpv, "load-scripts", "no");
         mpv_set_option_string(state->mpv, "cache", "yes");
-        mpv_set_option_string(state->mpv, "demuxer-max-bytes", "200MiB");
-        mpv_set_option_string(state->mpv, "demuxer-max-back-bytes", "150MiB");
-        mpv_set_option_string(state->mpv, "force-seekable", "yes");
+        mpv_set_option_string(state->mpv, "cache-pause", "no");
+        mpv_set_option_string(state->mpv, "cache-pause-wait", "1");
         mpv_set_option_string(state->mpv, "demuxer-readahead-secs", "60");
+        mpv_set_option_string(state->mpv, "demuxer-max-bytes", "128MiB");
+        mpv_set_option_string(state->mpv, "demuxer-max-back-bytes", "128MiB");
+        mpv_set_option_string(state->mpv, "force-seekable", "yes");
         mpv_set_option_string(state->mpv, "hr-seek", "default");
         mpv_set_option_string(state->mpv, "hr-seek-framedrop", "yes");
+        mpv_set_option_string(state->mpv, "stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
         mpv_set_option_string(state->mpv, "stop-screensaver", "yes");
         mpv_initialize(state->mpv);
     }
@@ -515,21 +638,56 @@ GtkWidget* PlayerView::create(
     g_signal_connect(gl_area, "render", G_CALLBACK(on_gl_render), state);
     g_signal_connect(gl_area, "unrealize", G_CALLBACK(on_gl_unrealize), state);
 
-    // Gestures
+    // Gestures: single click pauses, double click toggles fullscreen without accidental pause
     GtkGesture* click_gesture = gtk_gesture_click_new();
     gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click_gesture), GDK_BUTTON_PRIMARY);
     g_signal_connect_data(
         click_gesture, "released",
         G_CALLBACK(+[](GtkGestureClick*, gint n_press, gdouble, gdouble, gpointer user_data) {
             auto* s = static_cast<PlayerState*>(user_data);
-            if (n_press == 1) toggle_pause(s);
-            else if (n_press == 2) toggle_fullscreen(s);
+            if (!s) return;
+            if (n_press == 1) {
+                if (s->click_timer_id > 0) g_source_remove(s->click_timer_id);
+                s->click_timer_id = g_timeout_add(220, +[](gpointer d) -> gboolean {
+                    auto* st = static_cast<PlayerState*>(d);
+                    if (st) {
+                        st->click_timer_id = 0;
+                        toggle_pause(st);
+                    }
+                    return G_SOURCE_REMOVE;
+                }, s);
+            } else if (n_press == 2) {
+                if (s->click_timer_id > 0) {
+                    g_source_remove(s->click_timer_id);
+                    s->click_timer_id = 0;
+                }
+                toggle_fullscreen(s);
+            }
         }),
         state,
         nullptr,
         static_cast<GConnectFlags>(0)
     );
     gtk_widget_add_controller(gl_area, GTK_EVENT_CONTROLLER(click_gesture));
+
+    // Mouse scroll on video area adjusts volume
+    GtkEventController* scroll_ctrl = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_VERTICAL);
+    g_signal_connect_data(
+        scroll_ctrl, "scroll",
+        G_CALLBACK(+[](GtkEventControllerScroll*, gdouble, gdouble dy, gpointer user_data) -> gboolean {
+            auto* s = static_cast<PlayerState*>(user_data);
+            if (dy < 0) {
+                adjust_volume(s, 5.0);
+            } else if (dy > 0) {
+                adjust_volume(s, -5.0);
+            }
+            return TRUE;
+        }),
+        state,
+        nullptr,
+        static_cast<GConnectFlags>(0)
+    );
+    gtk_widget_add_controller(gl_area, scroll_ctrl);
 
     // Motion controller for auto-hiding controls
     GtkEventController* motion = gtk_event_controller_motion_new();
@@ -564,6 +722,17 @@ GtkWidget* PlayerView::create(
     gtk_widget_set_valign(top_bar, GTK_ALIGN_START);
     gtk_widget_set_hexpand(top_bar, TRUE);
     gtk_widget_add_css_class(top_bar, "player-bar-top");
+
+    GtkEventController* top_hover = gtk_event_controller_motion_new();
+    g_signal_connect_data(top_hover, "enter", G_CALLBACK(+[](GtkEventControllerMotion*, gdouble, gdouble, gpointer d) {
+        auto* s = static_cast<PlayerState*>(d);
+        if (s) s->controls_hovered = true;
+    }), state, nullptr, static_cast<GConnectFlags>(0));
+    g_signal_connect_data(top_hover, "leave", G_CALLBACK(+[](GtkEventControllerMotion*, gpointer d) {
+        auto* s = static_cast<PlayerState*>(d);
+        if (s) s->controls_hovered = false;
+    }), state, nullptr, static_cast<GConnectFlags>(0));
+    gtk_widget_add_controller(top_bar, top_hover);
 
     GtkWidget* back_btn = gtk_button_new_with_label("Назад");
     gtk_widget_add_css_class(back_btn, "player-btn");
@@ -673,6 +842,17 @@ GtkWidget* PlayerView::create(
     gtk_widget_set_hexpand(bottom_bar, TRUE);
     gtk_widget_add_css_class(bottom_bar, "player-bar-bottom");
 
+    GtkEventController* bot_hover = gtk_event_controller_motion_new();
+    g_signal_connect_data(bot_hover, "enter", G_CALLBACK(+[](GtkEventControllerMotion*, gdouble, gdouble, gpointer d) {
+        auto* s = static_cast<PlayerState*>(d);
+        if (s) s->controls_hovered = true;
+    }), state, nullptr, static_cast<GConnectFlags>(0));
+    g_signal_connect_data(bot_hover, "leave", G_CALLBACK(+[](GtkEventControllerMotion*, gpointer d) {
+        auto* s = static_cast<PlayerState*>(d);
+        if (s) s->controls_hovered = false;
+    }), state, nullptr, static_cast<GConnectFlags>(0));
+    gtk_widget_add_controller(bottom_bar, bot_hover);
+
     // Seek row
     GtkWidget* seek_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     GtkWidget* time_cur = gtk_label_new("00:00");
@@ -698,13 +878,18 @@ GtkWidget* PlayerView::create(
             }
 
             if (s->seek_debounce_id > 0) g_source_remove(s->seek_debounce_id);
-            s->seek_debounce_id = g_timeout_add(80, +[](gpointer data) -> gboolean {
+            s->seek_debounce_id = g_timeout_add(150, +[](gpointer data) -> gboolean {
                 auto* st = static_cast<PlayerState*>(data);
                 if (st && st->mpv) {
-                    mpv_set_property_async(st->mpv, 0, "time-pos", MPV_FORMAT_DOUBLE, &st->seek_target);
+                    double cur = 0;
+                    mpv_get_property(st->mpv, "time-pos", MPV_FORMAT_DOUBLE, &cur);
+                    bool is_bwd = (st->seek_target < cur);
+                    execute_seek(st, st->seek_target, is_bwd);
                 }
-                st->seek_debounce_id = 0;
-                st->is_seeking = false;
+                if (st) {
+                    st->seek_debounce_id = 0;
+                    st->is_seeking = false;
+                }
                 return G_SOURCE_REMOVE;
             }, s);
 
@@ -816,16 +1001,11 @@ GtkWidget* PlayerView::create(
     GtkWidget* vol_btn = gtk_button_new_from_icon_name("audio-volume-high-symbolic");
     state->vol_btn = vol_btn;
     gtk_widget_add_css_class(vol_btn, "player-btn-icon");
-    gtk_widget_set_tooltip_text(vol_btn, "Вимкнути / увімкнути звук");
+    gtk_widget_set_tooltip_text(vol_btn, "Вимкнути / увімкнути звук (M)");
     g_signal_connect_data(
         vol_btn, "clicked",
         G_CALLBACK(+[](GtkButton*, gpointer user_data) {
-            auto* s = static_cast<PlayerState*>(user_data);
-            int mute = 0;
-            mpv_get_property(s->mpv, "mute", MPV_FORMAT_FLAG, &mute);
-            int new_mute = !mute;
-            mpv_set_property(s->mpv, "mute", MPV_FORMAT_FLAG, &new_mute);
-            gtk_button_set_icon_name(GTK_BUTTON(s->vol_btn), new_mute ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic");
+            toggle_mute(static_cast<PlayerState*>(user_data));
         }),
         state,
         nullptr,
@@ -888,6 +1068,23 @@ GtkWidget* PlayerView::create(
             gtk_button_set_icon_name(GTK_BUTTON(s->play_btn), paused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic");
         }
 
+        // Keep volume button icon synced
+        if (s->vol_btn) {
+            int mute = 0;
+            mpv_get_property(s->mpv, "mute", MPV_FORMAT_FLAG, &mute);
+            double cur_vol = 100.0;
+            mpv_get_property(s->mpv, "volume", MPV_FORMAT_DOUBLE, &cur_vol);
+            if (mute || cur_vol <= 0.0) {
+                gtk_button_set_icon_name(GTK_BUTTON(s->vol_btn), "audio-volume-muted-symbolic");
+            } else if (cur_vol < 35.0) {
+                gtk_button_set_icon_name(GTK_BUTTON(s->vol_btn), "audio-volume-low-symbolic");
+            } else if (cur_vol < 70.0) {
+                gtk_button_set_icon_name(GTK_BUTTON(s->vol_btn), "audio-volume-medium-symbolic");
+            } else {
+                gtk_button_set_icon_name(GTK_BUTTON(s->vol_btn), "audio-volume-high-symbolic");
+            }
+        }
+
         if (!s->is_seeking && dur > 0) {
             if (s->spinner && gtk_widget_get_visible(s->spinner)) {
                 gtk_spinner_stop(GTK_SPINNER(s->spinner));
@@ -896,12 +1093,12 @@ GtkWidget* PlayerView::create(
             gtk_range_set_range(GTK_RANGE(s->seek_scale), 0, dur);
             gtk_range_set_value(GTK_RANGE(s->seek_scale), pos);
 
-            gtk_label_set_text(GTK_LABEL(s->time_cur_lbl), format_time(pos).c_str());
-            gtk_label_set_text(GTK_LABEL(s->time_dur_lbl), format_time(dur).c_str());
+            if (s->time_cur_lbl) gtk_label_set_text(GTK_LABEL(s->time_cur_lbl), format_time(pos).c_str());
+            if (s->time_dur_lbl) gtk_label_set_text(GTK_LABEL(s->time_dur_lbl), format_time(dur).c_str());
 
             int eof = 0;
             mpv_get_property(s->mpv, "eof-reached", MPV_FORMAT_FLAG, &eof);
-            if ((eof || (dur > 15 && pos >= dur - 1.5)) && !s->auto_advance_triggered) {
+            if ((eof || (dur > 30 && pos >= dur - 0.5)) && !s->auto_advance_triggered) {
                 if (s->current_idx + 1 < s->episodes.size()) {
                     s->auto_advance_triggered = true;
                     show_osd(s, "Наступна серія...", 2000);
@@ -927,6 +1124,18 @@ GtkWidget* PlayerView::create(
                     return TRUE;
                 case GDK_KEY_Right:
                     seek_relative(s, 10.0);
+                    return TRUE;
+                case GDK_KEY_Up:
+                    adjust_volume(s, 5.0);
+                    return TRUE;
+                case GDK_KEY_Down:
+                    adjust_volume(s, -5.0);
+                    return TRUE;
+                case GDK_KEY_m:
+                case GDK_KEY_M:
+                case GDK_KEY_Cyrillic_softsign:
+                case GDK_KEY_Cyrillic_SOFTSIGN:
+                    toggle_mute(s);
                     return TRUE;
                 case GDK_KEY_s:
                 case GDK_KEY_S:

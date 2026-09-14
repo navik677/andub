@@ -185,7 +185,7 @@ Stream AniBazaProvider::get_stream(const Anime& /*anime*/, const Episode& episod
             ep_num = std::stoi(ep_str);
         } catch (...) {}
 
-        auto resolved = KodikResolver::resolve(kodik_base, ep_num);
+        auto resolved = KodikResolver::resolve(kodik_base, ep_num, base_url + "/");
         if (!resolved.qualities.empty()) {
             return resolved;
         }

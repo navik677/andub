@@ -118,9 +118,9 @@ bool PlayerService::play_external(const Quality& quality, const std::string& ani
             std::ofstream f(input_conf);
             f << "# Anime shortcuts\n"
               << "s show-text \"Пропуск опенінгу (+85с)\" ; seek 85\n"
-              << "S show-text \"Повернення (-85с)\" ; seek -85\n"
+              << "S show-text \"Повернення (-85с)\" ; seek -85 ; set vid no ; set vid auto\n"
               << "RIGHT seek 10\n"
-              << "LEFT seek -10\n"
+              << "LEFT seek -10 ; set vid no ; set vid auto\n"
               << "UP add volume 5\n"
               << "DOWN add volume -5\n"
               << "SPACE cycle pause\n"
@@ -128,19 +128,28 @@ bool PlayerService::play_external(const Quality& quality, const std::string& ani
             args.push_back("--input-conf=" + input_conf);
         } catch (...) {}
 
-        if (quality.url.find(".m3u8") != std::string::npos || !quality.headers.empty()) {
-            args.push_back("--ytdl=no");
-            args.push_back("--cache=yes");
-            args.push_back("--demuxer-max-bytes=500MiB");
-            args.push_back("--demuxer-readahead-secs=300");
+        std::string stream_url = quality.url;
+        auto hls_pos = stream_url.find(":hls:manifest.m3u8");
+        if (hls_pos != std::string::npos) {
+            stream_url = stream_url.substr(0, hls_pos);
         }
+
+        args.push_back("--ytdl=no");
+        args.push_back("--load-scripts=no");
+        args.push_back("--cache=yes");
+        args.push_back("--demuxer-max-bytes=128MiB");
+        args.push_back("--demuxer-readahead-secs=60");
 
         std::string headers_str;
         std::string user_agent;
+        std::string referrer_val;
         for (const auto& [k, v] : quality.headers) {
             std::string lower_k = utils::utf8_tolower(k);
             if (lower_k == "user-agent") {
                 user_agent = v;
+            } else if (lower_k == "referer") {
+                referrer_val = v;
+                args.push_back("--referrer=" + v);
             } else {
                 if (!headers_str.empty()) headers_str += ",";
                 headers_str += k + ": " + v;
@@ -153,7 +162,7 @@ bool PlayerService::play_external(const Quality& quality, const std::string& ani
             args.push_back("--http-header-fields=" + headers_str);
         }
 
-        args.push_back(quality.url);
+        args.push_back(stream_url);
 
         std::vector<char*> c_args;
         for (auto& s : args) c_args.push_back(s.data());

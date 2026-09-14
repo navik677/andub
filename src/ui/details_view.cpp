@@ -4,6 +4,7 @@
 #include "../services/history_manager.hpp"
 #include "../services/favorites_manager.hpp"
 #include "../services/download_service.hpp"
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <thread>
 #include <vector>
 #include <cmath>
@@ -271,11 +272,17 @@ GtkWidget* DetailsView::create(
     GtkWidget* left_col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
     gtk_widget_set_size_request(left_col, 220, -1);
 
+    GtkWidget* poster_frame = gtk_overlay_new();
+    gtk_widget_add_css_class(poster_frame, "details-poster-frame");
+    gtk_widget_set_size_request(poster_frame, 220, 315);
+    gtk_widget_set_halign(poster_frame, GTK_ALIGN_CENTER);
+
     GtkWidget* poster = gtk_picture_new();
     gtk_widget_set_size_request(poster, 220, 315);
     gtk_picture_set_can_shrink(GTK_PICTURE(poster), TRUE);
     gtk_picture_set_content_fit(GTK_PICTURE(poster), GTK_CONTENT_FIT_COVER);
-    gtk_box_append(GTK_BOX(left_col), poster);
+    gtk_overlay_set_child(GTK_OVERLAY(poster_frame), poster);
+    gtk_box_append(GTK_BOX(left_col), poster_frame);
 
     if (!anime.poster_url.empty()) {
         std::thread([poster_ptr = poster, url = anime.poster_url]() {
@@ -284,7 +291,27 @@ GtkWidget* DetailsView::create(
                 g_idle_add(+[](gpointer p) -> gboolean {
                     auto* d = static_cast<std::pair<GtkWidget*, std::string>*>(p);
                     if (GTK_IS_PICTURE(d->first)) {
-                        gtk_picture_set_filename(GTK_PICTURE(d->first), d->second.c_str());
+                        GError* err = nullptr;
+                        GdkPixbuf* pb = gdk_pixbuf_new_from_file_at_scale(d->second.c_str(), 220, 315, FALSE, &err);
+                        if (pb) {
+                            GdkTexture* texture = gdk_texture_new_for_pixbuf(pb);
+                            if (texture) {
+                                gtk_picture_set_paintable(GTK_PICTURE(d->first), GDK_PAINTABLE(texture));
+                                g_object_unref(texture);
+                            }
+                            g_object_unref(pb);
+                        } else {
+                            if (err) g_error_free(err);
+                            GError* err2 = nullptr;
+                            GdkTexture* texture = gdk_texture_new_from_filename(d->second.c_str(), &err2);
+                            if (texture) {
+                                gtk_picture_set_paintable(GTK_PICTURE(d->first), GDK_PAINTABLE(texture));
+                                g_object_unref(texture);
+                            } else {
+                                if (err2) g_error_free(err2);
+                                gtk_picture_set_filename(GTK_PICTURE(d->first), d->second.c_str());
+                            }
+                        }
                     }
                     delete d;
                     return G_SOURCE_REMOVE;
@@ -395,7 +422,15 @@ GtkWidget* DetailsView::create(
                 g_idle_add(+[](gpointer p) -> gboolean {
                     auto* d = static_cast<std::pair<GtkWidget*, std::string>*>(p);
                     if (GTK_IS_PICTURE(d->first)) {
-                        gtk_picture_set_filename(GTK_PICTURE(d->first), d->second.c_str());
+                        GError* err = nullptr;
+                        GdkTexture* texture = gdk_texture_new_from_filename(d->second.c_str(), &err);
+                        if (texture) {
+                            gtk_picture_set_paintable(GTK_PICTURE(d->first), GDK_PAINTABLE(texture));
+                            g_object_unref(texture);
+                        } else {
+                            if (err) g_error_free(err);
+                            gtk_picture_set_filename(GTK_PICTURE(d->first), d->second.c_str());
+                        }
                         gtk_widget_add_css_class(d->first, "loaded");
 
                         struct AnimState {

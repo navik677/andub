@@ -162,7 +162,12 @@ Response Client::post(const std::string& url, const std::string& data, const std
     for (const auto& [k, v] : headers) {
         cmd << "-H \"" << k << ": " << v << "\" ";
     }
-    cmd << "-d \"" << data << "\" -w \"\\n%{http_code}\" \"" << url << "\"";
+    std::string safe_data;
+    for (char c : data) {
+        if (c == '\'') safe_data += "'\\''";
+        else safe_data += c;
+    }
+    cmd << "-d '" << safe_data << "' -w \"\\n%{http_code}\" \"" << url << "\"";
 
     std::array<char, 4096> buffer;
     std::string output;

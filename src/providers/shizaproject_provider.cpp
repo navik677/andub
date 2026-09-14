@@ -153,7 +153,7 @@ Stream ShizaProjectProvider::get_stream(const Anime& /*anime*/, const Episode& e
     if (stream_url.find("kodik") != std::string::npos) {
         int ep_num = 1;
         try { ep_num = std::stoi(episode.number); } catch (...) {}
-        auto resolved = KodikResolver::resolve(stream_url, ep_num);
+        auto resolved = KodikResolver::resolve(stream_url, ep_num, "https://shizaproject.com/");
         if (!resolved.qualities.empty()) {
             return resolved;
         }
