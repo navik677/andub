@@ -47,7 +47,15 @@ cp -f build/andub "$PREFIX_BIN/andub"
 chmod +x "$PREFIX_BIN/andub"
 ln -sf "$PREFIX_BIN/andub" "$PREFIX_BIN/anime-gui"
 ln -sf "$PREFIX_BIN/andub" "$PREFIX_BIN/anime-tui"
-cp -d lib/libmpv.so* "$PREFIX_LIB/" 2>/dev/null || true
+# Only ship the bundled libmpv.so if there's no system one — copying it
+# unconditionally would shadow a correctly-linked system libmpv for anyone
+# with ~/.local/lib on their LD_LIBRARY_PATH, reintroducing the exact
+# "wrong libmpv ABI" crash this script is supposed to avoid.
+if ! pkg-config --exists mpv; then
+    cp -d lib/libmpv.so* "$PREFIX_LIB/" 2>/dev/null || true
+else
+    rm -f "$PREFIX_LIB"/libmpv.so*
+fi
 
 # Копіювання ресурсів
 cp -f resources/style.css "$PREFIX_DATA/andub/style.css"
