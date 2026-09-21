@@ -47,19 +47,25 @@
 
 #### Fedora
 ```bash
-sudo dnf install -y gcc-c++ meson ninja-build gtk4-devel libcurl-devel mpv yt-dlp
+sudo dnf install -y gcc-c++ meson ninja-build gtk4-devel libcurl-devel mpv-libs-devel yt-dlp
 ```
 
 #### Ubuntu / Debian
 ```bash
 sudo apt update
-sudo apt install -y g++ meson ninja-build libgtk-4-dev libcurl4-openssl-dev mpv yt-dlp
+sudo apt install -y g++ meson ninja-build libgtk-4-dev libcurl4-openssl-dev libmpv-dev yt-dlp
 ```
 
 #### Arch Linux
 ```bash
 sudo pacman -S gcc meson ninja gtk4 curl mpv yt-dlp
 ```
+
+> Збірка лінкується проти **системного** `libmpv` (через pkg-config), якщо він встановлений
+> (пакети `mpv-libs-devel` / `libmpv-dev` вище). Бандлований `lib/libmpv.so.2.5.0` у репозиторії
+> зібраний на Fedora з дуже новими залежностями (ffmpeg 62/60, libplacebo 360 тощо) і слугує
+> лише запасним варіантом — на інших дистрибутивах (напр. Ubuntu) він не лінкується через
+> невідповідність версій системних бібліотек.
 
 ---
 

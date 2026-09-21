@@ -12,7 +12,7 @@ if ! command -v ninja &> /dev/null; then MISSING_DEPS="ninja $MISSING_DEPS"; fi
 if ! command -v pkg-config &> /dev/null; then MISSING_DEPS="pkg-config $MISSING_DEPS"; fi
 if ! pkg-config --exists gtk4; then MISSING_DEPS="gtk4-devel $MISSING_DEPS"; fi
 if ! pkg-config --exists libcurl; then MISSING_DEPS="libcurl-devel $MISSING_DEPS"; fi
-if ! command -v mpv &> /dev/null; then MISSING_DEPS="mpv $MISSING_DEPS"; fi
+if ! pkg-config --exists mpv && [ ! -f lib/libmpv.so ]; then MISSING_DEPS="libmpv-dev $MISSING_DEPS"; fi
 
 if [ -n "$MISSING_DEPS" ]; then
     echo -e "\033[1;33m[Попередження]\033[0m Відсутні необхідні пакунки: $MISSING_DEPS"
@@ -20,9 +20,9 @@ if [ -n "$MISSING_DEPS" ]; then
     if command -v pacman &> /dev/null; then
         sudo pacman -S --needed --noconfirm base-devel meson ninja gtk4 curl mpv yt-dlp || true
     elif command -v apt-get &> /dev/null; then
-        sudo apt-get update && sudo apt-get install -y build-essential meson ninja-build libgtk-4-dev libcurl4-openssl-dev mpv yt-dlp || true
+        sudo apt-get update && sudo apt-get install -y build-essential meson ninja-build libgtk-4-dev libcurl4-openssl-dev libmpv-dev yt-dlp || true
     elif command -v dnf &> /dev/null; then
-        sudo dnf install -y gcc-c++ meson ninja-build gtk4-devel libcurl-devel mpv yt-dlp || true
+        sudo dnf install -y gcc-c++ meson ninja-build gtk4-devel libcurl-devel mpv-libs-devel yt-dlp || true
     fi
 fi
 

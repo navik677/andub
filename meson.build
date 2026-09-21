@@ -15,8 +15,16 @@ threads_dep = dependency('threads')
 curl_dep = dependency('libcurl', required: false)
 dl_dep = cpp.find_library('dl', required: false)
 
-# MPV dependency
-mpv_dep = cpp.find_library('mpv', dirs: [meson.current_source_dir() / 'lib', '/usr/lib64'], required: true)
+# MPV dependency: prefer the system's own libmpv (matches the distro's
+# ffmpeg/lua/placebo ABI) so the bundled lib/libmpv.so (built against
+# bleeding-edge Fedora package versions) doesn't break linking on other
+# distros. Fall back to the bundled copy only if no system libmpv is found.
+mpv_dep = dependency('mpv', required: false)
+if not mpv_dep.found()
+  mpv_dep = cpp.find_library('mpv',
+    dirs: ['/usr/lib64', '/usr/lib', '/usr/lib/x86_64-linux-gnu', meson.current_source_dir() / 'lib'],
+    required: true)
+endif
 
 extra_c_args = []
 deps = [gtk4_dep, threads_dep, dl_dep, mpv_dep]
