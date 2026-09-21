@@ -1,40 +1,19 @@
-project('andub', 'cpp',
-  version: '1.0.0',
+project(
+  'andub',
+  'cpp',
+  version: '1.1.0-linux',
   default_options: [
     'cpp_std=c++20',
     'warning_level=2',
     'buildtype=release',
-  ]
+  ],
 )
 
-cpp = meson.get_compiler('cpp')
-
-# Dependencies
-gtk4_dep = dependency('gtk4', version: '>= 4.6.0')
+gtk4_dep = dependency('gtk4', version: '>=4.6.0', required: true)
 threads_dep = dependency('threads')
-curl_dep = dependency('libcurl', required: false)
-dl_dep = cpp.find_library('dl', required: false)
+curl_dep = dependency('libcurl', required: true)
+mpv_dep = dependency('mpv', required: true)
 
-# MPV dependency: prefer the system's own libmpv (matches the distro's
-# ffmpeg/lua/placebo ABI) so the bundled lib/libmpv.so (built against
-# bleeding-edge Fedora package versions) doesn't break linking on other
-# distros. Fall back to the bundled copy only if no system libmpv is found.
-mpv_dep = dependency('mpv', required: false)
-if not mpv_dep.found()
-  mpv_dep = cpp.find_library('mpv',
-    dirs: ['/usr/lib64', '/usr/lib', '/usr/lib/x86_64-linux-gnu', meson.current_source_dir() / 'lib'],
-    required: true)
-endif
-
-extra_c_args = []
-deps = [gtk4_dep, threads_dep, dl_dep, mpv_dep]
-
-if curl_dep.found()
-  deps += curl_dep
-  extra_c_args += '-DHAVE_LIBCURL'
-endif
-
-# Source files
 sources = files(
   'src/main.cpp',
   'src/application.cpp',
@@ -63,17 +42,32 @@ sources = files(
 
 inc_dirs = include_directories('src', 'include')
 
-executable('andub',
+executable(
+  'andub',
   sources,
   include_directories: inc_dirs,
-  dependencies: deps,
-  cpp_args: extra_c_args,
-  build_rpath: meson.current_source_dir() / 'lib',
-  install_rpath: '$ORIGIN/../lib:' + meson.current_source_dir() / 'lib',
-  install: true
+  dependencies: [
+    gtk4_dep,
+    threads_dep,
+    curl_dep,
+    mpv_dep,
+  ],
+  cpp_args: ['-DHAVE_LIBCURL'],
+  install: true,
 )
 
 install_data(
   'resources/style.css',
-  install_dir: get_option('datadir') / 'andub'
+  install_dir: get_option('datadir') / 'andub',
+)
+
+install_data(
+  'resources/anime-gui.png',
+  install_dir: get_option('datadir') / 'icons/hicolor/256x256/apps',
+  rename: 'andub.png',
+)
+
+install_data(
+  'desktop/andub.desktop',
+  install_dir: get_option('datadir') / 'applications',
 )

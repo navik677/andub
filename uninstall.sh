@@ -1,28 +1,15 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+PREFIX="${HOME}/.local"
 
-echo -e "\033[1;36m==> Видалення Anime GUI...\033[0m"
+rm -f "${PREFIX}/bin/andub"
+rm -f "${PREFIX}/share/applications/andub.desktop"
+rm -f "${PREFIX}/share/icons/hicolor/256x256/apps/andub.png"
+rm -rf "${PREFIX}/share/andub"
 
-PREFIX_BIN="$HOME/.local/bin"
-PREFIX_DATA="$HOME/.local/share"
-
-# 1. Видалення бінарників
-rm -f "$PREFIX_BIN/anime-gui"
-rm -f "$PREFIX_BIN/anime-tui"
-
-# 2. Видалення desktop файлу та іконок
-rm -f "$PREFIX_DATA/applications/anime-gui.desktop"
-rm -f "$PREFIX_DATA/icons/hicolor/256x256/apps/anime-gui.png"
-rm -rf "$PREFIX_DATA/anime-gui"
-
-# 3. Видалення кешу та налаштувань за бажанням
-if [ -d "$HOME/.cache/anime-gui" ]; then
-    rm -rf "$HOME/.cache/anime-gui"
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "${PREFIX}/share/applications" || true
 fi
 
-if command -v update-desktop-database &> /dev/null; then
-    update-desktop-database "$PREFIX_DATA/applications" || true
-fi
-
-echo -e "\033[1;32m[Готово!]\033[0m Anime GUI успішно видалено з системи."
+echo "Andub removed."

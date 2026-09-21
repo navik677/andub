@@ -1,74 +1,50 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
 
-echo -e "\033[1;36m==> Встановлення Anime GUI (C++ GTK4)...\033[0m"
+sudo apt update
+sudo apt install -y \
+    build-essential \
+    meson \
+    ninja-build \
+    pkg-config \
+    libgtk-4-dev \
+    libcurl4-openssl-dev \
+    libmpv-dev \
+    mpv \
+    yt-dlp \
+    libnotify-bin \
+    desktop-file-utils
 
-# 1. Перевірка компілятора та системних інструментів
-MISSING_DEPS=""
-if ! command -v g++ &> /dev/null && ! command -v clang++ &> /dev/null; then MISSING_DEPS="g++ $MISSING_DEPS"; fi
-if ! command -v meson &> /dev/null; then MISSING_DEPS="meson $MISSING_DEPS"; fi
-if ! command -v ninja &> /dev/null; then MISSING_DEPS="ninja $MISSING_DEPS"; fi
-if ! command -v pkg-config &> /dev/null; then MISSING_DEPS="pkg-config $MISSING_DEPS"; fi
-if ! pkg-config --exists gtk4; then MISSING_DEPS="gtk4-devel $MISSING_DEPS"; fi
-if ! pkg-config --exists libcurl; then MISSING_DEPS="libcurl-devel $MISSING_DEPS"; fi
-if ! pkg-config --exists mpv && [ ! -f lib/libmpv.so ]; then MISSING_DEPS="libmpv-dev $MISSING_DEPS"; fi
+./build.sh
 
-if [ -n "$MISSING_DEPS" ]; then
-    echo -e "\033[1;33m[Попередження]\033[0m Відсутні необхідні пакунки: $MISSING_DEPS"
-    echo -e "Спроба автоматичного встановлення..."
-    if command -v pacman &> /dev/null; then
-        sudo pacman -S --needed --noconfirm base-devel meson ninja gtk4 curl mpv yt-dlp || true
-    elif command -v apt-get &> /dev/null; then
-        sudo apt-get update && sudo apt-get install -y build-essential meson ninja-build libgtk-4-dev libcurl4-openssl-dev libmpv-dev yt-dlp || true
-    elif command -v dnf &> /dev/null; then
-        sudo dnf install -y gcc-c++ meson ninja-build gtk4-devel libcurl-devel mpv-libs-devel yt-dlp || true
-    fi
+PREFIX="${HOME}/.local"
+
+meson install -C build --destdir "${ROOT_DIR}/.install-root"
+
+INSTALL_ROOT="${ROOT_DIR}/.install-root${PREFIX}"
+
+mkdir -p "${PREFIX}/bin"
+mkdir -p "${PREFIX}/share/applications"
+mkdir -p "${PREFIX}/share/icons/hicolor/256x256/apps"
+mkdir -p "${PREFIX}/share/andub"
+
+cp -f "${INSTALL_ROOT}/bin/andub" "${PREFIX}/bin/andub"
+cp -f "${INSTALL_ROOT}/share/andub/style.css" "${PREFIX}/share/andub/style.css"
+cp -f "${INSTALL_ROOT}/share/icons/hicolor/256x256/apps/andub.png" \
+      "${PREFIX}/share/icons/hicolor/256x256/apps/andub.png"
+cp -f "${INSTALL_ROOT}/share/applications/andub.desktop" \
+      "${PREFIX}/share/applications/andub.desktop"
+
+rm -rf "${ROOT_DIR}/.install-root"
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "${PREFIX}/share/applications" || true
 fi
 
-# 2. Збірка програми
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-
-echo -e "\033[1;34m==> Компіляція проекту...\033[0m"
-if [ ! -d "build" ]; then
-    meson setup build --buildtype=release
-fi
-ninja -C build
-
-# 3. Встановлення бінарника
-PREFIX_BIN="$HOME/.local/bin"
-PREFIX_LIB="$HOME/.local/lib"
-PREFIX_DATA="$HOME/.local/share"
-mkdir -p "$PREFIX_BIN" "$PREFIX_LIB" "$PREFIX_DATA/applications" "$PREFIX_DATA/icons/hicolor/256x256/apps" "$PREFIX_DATA/andub"
-
-echo -e "\033[1;34m==> Встановлення файлів у $HOME/.local/...\033[0m"
-cp -f build/andub "$PREFIX_BIN/andub"
-chmod +x "$PREFIX_BIN/andub"
-ln -sf "$PREFIX_BIN/andub" "$PREFIX_BIN/anime-gui"
-ln -sf "$PREFIX_BIN/andub" "$PREFIX_BIN/anime-tui"
-cp -d lib/libmpv.so* "$PREFIX_LIB/" 2>/dev/null || true
-
-# Копіювання ресурсів
-cp -f resources/style.css "$PREFIX_DATA/andub/style.css"
-if [ -f "resources/anime-gui.png" ]; then
-    cp -f resources/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/andub.png"
-elif [ -f "desktop/anime-gui.png" ]; then
-    cp -f desktop/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/andub.png"
-fi
-
-# Встановлення .desktop ярлика
-if [ -f "desktop/andub.desktop" ]; then
-    sed -e "s|Exec=andub|Exec=$PREFIX_BIN/andub|g" desktop/andub.desktop > "$PREFIX_DATA/applications/andub.desktop"
-    chmod +x "$PREFIX_DATA/applications/andub.desktop"
-elif [ -f "desktop/anime-gui.desktop" ]; then
-    sed -e "s|Exec=anime-gui|Exec=$PREFIX_BIN/andub|g" desktop/anime-gui.desktop > "$PREFIX_DATA/applications/andub.desktop"
-    chmod +x "$PREFIX_DATA/applications/andub.desktop"
-fi
-
-if command -v update-desktop-database &> /dev/null; then
-    update-desktop-database "$PREFIX_DATA/applications" || true
-fi
-
-echo -e "\033[1;32m[Готово!]\033[0m Andub успішно встановлено!"
-echo -e "Додаток доступний у меню програм або через термінал командою: \033[1;36mandub\033[0m (або \033[1;36manime-gui\033[0m / \033[1;36manime-tui\033[0m)"
+echo
+echo "Andub installed."
+echo "Run:"
+echo "  ~/.local/bin/andub"

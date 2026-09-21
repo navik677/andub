@@ -1,112 +1,42 @@
-name: Build & Release Anime GUI
+name: Linux Build
 
 on:
   push:
-    branches: [ "gui-gtk", "main" ]
-    tags: [ "v*" ]
+    branches: ["main", "ostiktest"]
   pull_request:
-    branches: [ "gui-gtk", "main" ]
+    branches: ["main", "ostiktest"]
   workflow_dispatch:
 
 jobs:
-  build-linux-appimage:
-    name: Build Linux AppImage
-    runs-on: ubuntu-22.04
+  ubuntu-build:
+    runs-on: ubuntu-24.04
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build libgtk-4-dev libcurl4-openssl-dev libglib2.0-dev
+          sudo apt-get install -y \
+            build-essential \
+            meson \
+            ninja-build \
+            pkg-config \
+            libgtk-4-dev \
+            libcurl4-openssl-dev \
+            libmpv-dev \
+            mpv \
+            yt-dlp \
+            libnotify-bin
 
-      - name: Configure and build
+      - name: Configure
+        run: meson setup build --buildtype=release
+
+      - name: Build
+        run: meson compile -C build
+
+      - name: Run tests if configured
         run: |
-          meson setup build --buildtype=release
-          ninja -C build
-
-      - name: Generate AppImage
-        run: |
-          chmod +x scripts/build_appimage.sh
-          ./scripts/build_appimage.sh
-
-      - name: Upload Linux AppImage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Anime-GUI-Linux-AppImage
-          path: dist/Anime-GUI-x86_64.AppImage
-
-  build-windows-exe:
-    name: Build Windows EXE
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            git
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-gtk4
-            mingw-w64-x86_64-curl
-            mingw-w64-x86_64-meson
-            mingw-w64-x86_64-ninja
-            zip
-
-      - name: Build Anime GUI for Windows
-        run: |
-          meson setup build_win --buildtype=release
-          ninja -C build_win
-
-      - name: Package Windows distribution
-        run: |
-          mkdir -p dist/Anime-GUI-Windows-x86_64
-          cp build_win/anime-gui.exe dist/Anime-GUI-Windows-x86_64/
-          cp -r resources dist/Anime-GUI-Windows-x86_64/
-          
-          # Copy DLL dependencies
-          for dll in $(ntldd -R build_win/anime-gui.exe | grep mingw64 | awk '{print $3}'); do
-            cp "$dll" dist/Anime-GUI-Windows-x86_64/
-          done
-          
-          # Copy schemas
-          mkdir -p dist/Anime-GUI-Windows-x86_64/share/glib-2.0/schemas
-          cp -r /mingw64/share/glib-2.0/schemas/* dist/Anime-GUI-Windows-x86_64/share/glib-2.0/schemas/
-          glib-compile-schemas dist/Anime-GUI-Windows-x86_64/share/glib-2.0/schemas/
-          
-          cd dist
-          zip -r Anime-GUI-Windows-x86_64.zip Anime-GUI-Windows-x86_64
-
-      - name: Upload Windows Bundle artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Anime-GUI-Windows-Bundle
-          path: dist/Anime-GUI-Windows-x86_64.zip
-
-  release:
-    name: Publish Release
-    needs: [build-linux-appimage, build-windows-exe]
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            Anime-GUI-Linux-AppImage/Anime-GUI-x86_64.AppImage
-            Anime-GUI-Windows-Bundle/Anime-GUI-Windows-x86_64.zip
-          draft: false
-          prerelease: false
+          if meson test -C build --list | grep -q .; then
+            meson test -C build --print-errorlogs
+          fi
