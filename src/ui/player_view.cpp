@@ -600,7 +600,11 @@ GtkWidget* PlayerView::create(
         mpv_set_option_string(state->mpv, "terminal", "no");
         mpv_set_option_string(state->mpv, "msg-level", "all=warn");
         mpv_set_option_string(state->mpv, "vo", "libmpv");
-        mpv_set_option_string(state->mpv, "hwdec", "auto-safe");
+        // auto-copy (not auto-safe): zero-copy hwdec interop (vaapi-egl etc.) into our
+        // GtkGLArea render context is driver-dependent and produces solid-color texture
+        // corruption on some GPUs/drivers. auto-copy keeps HW-accelerated decode but always
+        // copies the frame back before upload, avoiding the fragile EGL/DRM interop path.
+        mpv_set_option_string(state->mpv, "hwdec", "auto-copy");
         mpv_set_option_string(state->mpv, "vd-lavc-threads", "4");
         // CRITICAL: Must be set BEFORE mpv_initialize() to prevent yt-dlp 20s timeout delay on video start
         mpv_set_option_string(state->mpv, "ytdl", "no");
