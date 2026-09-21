@@ -12,7 +12,7 @@ if ! command -v ninja &> /dev/null; then MISSING_DEPS="ninja $MISSING_DEPS"; fi
 if ! command -v pkg-config &> /dev/null; then MISSING_DEPS="pkg-config $MISSING_DEPS"; fi
 if ! pkg-config --exists gtk4; then MISSING_DEPS="gtk4-devel $MISSING_DEPS"; fi
 if ! pkg-config --exists libcurl; then MISSING_DEPS="libcurl-devel $MISSING_DEPS"; fi
-if ! pkg-config --exists mpv && [ ! -f lib/libmpv.so ]; then MISSING_DEPS="libmpv-dev $MISSING_DEPS"; fi
+if ! pkg-config --exists mpv; then MISSING_DEPS="libmpv-dev $MISSING_DEPS"; fi
 
 if [ -n "$MISSING_DEPS" ]; then
     echo -e "\033[1;33m[Попередження]\033[0m Відсутні необхідні пакунки: $MISSING_DEPS"
