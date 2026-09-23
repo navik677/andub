@@ -3,6 +3,7 @@
 #include "details_view.hpp"
 #include "player_view.hpp"
 #include "downloads_view.hpp"
+#include "responsive.hpp"
 #include "../providers/anilibria_provider.hpp"
 #include "../providers/shizaproject_provider.hpp"
 #include "../providers/anibaza_provider.hpp"
@@ -111,6 +112,19 @@ struct SearchResultData {
     int page = 1;
     uint64_t seq = 0;
 };
+
+// Wraps a header section so its size doesn't set the window's minimum width.
+// The responsive layout collapses the section before it would be clipped.
+static GtkWidget* shrinkable(GtkWidget* child) {
+    GtkWidget* sw = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw), GTK_POLICY_EXTERNAL, GTK_POLICY_NEVER);
+    gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(sw), TRUE);
+    gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(sw), TRUE);
+    gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(sw), FALSE);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(sw), child);
+    gtk_widget_add_css_class(sw, "header-section");
+    return sw;
+}
 
 static void do_search(AppState* state);
 static void update_nav_ui(AppState* state);
@@ -740,7 +754,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
         static_cast<GConnectFlags>(0)
     );
 
-    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), left_box);
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), shrinkable(left_box));
 
     // Search Entry
     GtkWidget* search_entry = gtk_search_entry_new();
@@ -835,7 +849,23 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     );
     gtk_box_append(GTK_BOX(right_box), player_btn);
 
-    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), right_box);
+    // Overflow menu: holds secondary header controls when the window is too narrow
+    GtkWidget* more_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_margin_start(more_box, 6);
+    gtk_widget_set_margin_end(more_box, 6);
+    gtk_widget_set_margin_top(more_box, 6);
+    gtk_widget_set_margin_bottom(more_box, 6);
+    GtkWidget* more_popover = gtk_popover_new();
+    gtk_popover_set_child(GTK_POPOVER(more_popover), more_box);
+
+    GtkWidget* more_btn = gtk_menu_button_new();
+    gtk_menu_button_set_icon_name(GTK_MENU_BUTTON(more_btn), "open-menu-symbolic");
+    gtk_menu_button_set_popover(GTK_MENU_BUTTON(more_btn), more_popover);
+    gtk_widget_set_tooltip_text(more_btn, "Більше");
+    gtk_widget_set_visible(more_btn, FALSE);
+    gtk_box_prepend(GTK_BOX(right_box), more_btn);
+
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), shrinkable(right_box));
 
     gtk_window_set_titlebar(GTK_WINDOW(window), header);
 
@@ -964,7 +994,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
 
     GtkWidget* flow = gtk_flow_box_new();
     gtk_widget_set_valign(flow, GTK_ALIGN_START);
-    gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(flow), 4);
+    gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(flow), 1);
     gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(flow), 10);
     gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(flow), 24);
     gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(flow), 28);
@@ -1002,6 +1032,70 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     gtk_stack_add_named(GTK_STACK(stack), player_container, "player");
 
     gtk_window_set_child(GTK_WINDOW(window), stack);
+
+    // Responsive layout: collapse header controls and tighten spacing as the window narrows
+    struct HeaderLayout {
+        GtkWidget *window, *brand, *prov, *genre, *home, *fav, *search;
+        GtkWidget *left_box, *right_box, *more_btn, *more_box;
+        GtkWidget *theme, *downloads, *player;
+        GtkWidget *flow, *fav_bar;
+    };
+    auto* hl = new HeaderLayout{
+        window, brand_btn, prov_drop, genre_drop, home_btn, fav_btn, search_entry,
+        left_box, right_box, more_btn, more_box,
+        theme_drop, dl_btn, player_btn,
+        flow, fav_bar
+    };
+    g_object_set_data_full(G_OBJECT(window), "anime-header-layout", hl,
+                           [](gpointer d) { delete static_cast<HeaderLayout*>(d); });
+
+    on_layout_size_changed(window, [hl](LayoutSize size) {
+        const bool wide = size == LayoutSize::Wide;
+        const bool narrow = size == LayoutSize::Narrow;
+
+        auto place = [](GtkWidget* w, GtkWidget* box, GtkWidget* after) {
+            g_object_ref(w);
+            if (GtkWidget* parent = gtk_widget_get_parent(w)) gtk_box_remove(GTK_BOX(parent), w);
+            gtk_box_insert_child_after(GTK_BOX(box), w, after);
+            g_object_unref(w);
+        };
+
+        // Genre filter stays in the bar unless the window is narrow
+        if (narrow) place(hl->genre, hl->more_box, nullptr);
+        else place(hl->genre, hl->left_box, hl->prov);
+
+        // Theme / downloads / player mode move into the overflow menu below the wide breakpoint
+        GtkWidget* secondary_box = wide ? hl->right_box : hl->more_box;
+        GtkWidget* anchor = wide ? hl->more_btn : (narrow ? hl->genre : nullptr);
+        place(hl->theme, secondary_box, anchor);
+        place(hl->downloads, secondary_box, hl->theme);
+        place(hl->player, secondary_box, hl->downloads);
+        gtk_widget_set_visible(hl->more_btn, !wide);
+
+        gtk_widget_set_visible(hl->brand, !narrow);
+        if (narrow) {
+            gtk_button_set_icon_name(GTK_BUTTON(hl->home), "go-home-symbolic");
+            gtk_button_set_icon_name(GTK_BUTTON(hl->fav), "starred-symbolic");
+        } else {
+            gtk_button_set_label(GTK_BUTTON(hl->home), "Головна");
+            gtk_button_set_label(GTK_BUTTON(hl->fav), "Улюблені");
+        }
+        gtk_widget_set_size_request(hl->search, wide ? 240 : (narrow ? 140 : 200), -1);
+
+        // Catalog grid spacing
+        const int margin = wide ? 40 : (narrow ? 12 : 24);
+        gtk_widget_set_margin_start(hl->flow, margin);
+        gtk_widget_set_margin_end(hl->flow, margin);
+        gtk_widget_set_margin_start(hl->fav_bar, margin);
+        gtk_widget_set_margin_end(hl->fav_bar, margin);
+        gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(hl->flow), wide ? 24 : (narrow ? 12 : 18));
+        gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(hl->flow), wide ? 28 : (narrow ? 16 : 22));
+
+        if (narrow) gtk_widget_add_css_class(hl->window, "layout-narrow");
+        else gtk_widget_remove_css_class(hl->window, "layout-narrow");
+        if (!wide) gtk_widget_add_css_class(hl->window, "layout-compact");
+        else gtk_widget_remove_css_class(hl->window, "layout-compact");
+    });
 
     // Cleanup on destroy
     g_signal_connect_data(

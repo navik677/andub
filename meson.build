@@ -20,10 +20,12 @@ dl_dep = cpp.find_library('dl', required: false)
 # bleeding-edge Fedora package versions) doesn't break linking on other
 # distros. Fall back to the bundled copy only if no system libmpv is found.
 mpv_dep = dependency('mpv', required: false)
+using_bundled_mpv = false
 if not mpv_dep.found()
   mpv_dep = cpp.find_library('mpv',
     dirs: ['/usr/lib64', '/usr/lib', '/usr/lib/x86_64-linux-gnu', meson.current_source_dir() / 'lib'],
     required: true)
+  using_bundled_mpv = true
 endif
 
 extra_c_args = []
@@ -54,6 +56,7 @@ sources = files(
   'src/providers/anitube_provider.cpp',
   'src/providers/animevost_provider.cpp',
   'src/providers/anistar_provider.cpp',
+  'src/ui/responsive.cpp',
   'src/ui/anime_card.cpp',
   'src/ui/details_view.cpp',
   'src/ui/player_view.cpp',
@@ -63,13 +66,21 @@ sources = files(
 
 inc_dirs = include_directories('src', 'include')
 
+# Only point the runtime loader at the bundled lib/ dir when we actually had
+# to fall back to it. Otherwise the dynamic linker would prefer the bundled
+# libmpv.so.2 (same SONAME as the system one, built against exotic package
+# versions) over the correctly-linked system libmpv, even though the build
+# itself used the system library.
+bundled_rpath = using_bundled_mpv ? (meson.current_source_dir() / 'lib') : ''
+bundled_install_rpath = using_bundled_mpv ? ('$ORIGIN/../lib:' + meson.current_source_dir() / 'lib') : ''
+
 executable('andub',
   sources,
   include_directories: inc_dirs,
   dependencies: deps,
   cpp_args: extra_c_args,
-  build_rpath: meson.current_source_dir() / 'lib',
-  install_rpath: '$ORIGIN/../lib:' + meson.current_source_dir() / 'lib',
+  build_rpath: bundled_rpath,
+  install_rpath: bundled_install_rpath,
   install: true
 )
 

@@ -12,7 +12,7 @@ if ! command -v ninja &> /dev/null; then MISSING_DEPS="ninja $MISSING_DEPS"; fi
 if ! command -v pkg-config &> /dev/null; then MISSING_DEPS="pkg-config $MISSING_DEPS"; fi
 if ! pkg-config --exists gtk4; then MISSING_DEPS="gtk4-devel $MISSING_DEPS"; fi
 if ! pkg-config --exists libcurl; then MISSING_DEPS="libcurl-devel $MISSING_DEPS"; fi
-if ! pkg-config --exists mpv && [ ! -f lib/libmpv.so ]; then MISSING_DEPS="libmpv-dev $MISSING_DEPS"; fi
+if ! pkg-config --exists mpv; then MISSING_DEPS="libmpv-dev $MISSING_DEPS"; fi
 
 if [ -n "$MISSING_DEPS" ]; then
     echo -e "\033[1;33m[Попередження]\033[0m Відсутні необхідні пакунки: $MISSING_DEPS"
@@ -47,7 +47,15 @@ cp -f build/andub "$PREFIX_BIN/andub"
 chmod +x "$PREFIX_BIN/andub"
 ln -sf "$PREFIX_BIN/andub" "$PREFIX_BIN/anime-gui"
 ln -sf "$PREFIX_BIN/andub" "$PREFIX_BIN/anime-tui"
-cp -d lib/libmpv.so* "$PREFIX_LIB/" 2>/dev/null || true
+# Only ship the bundled libmpv.so if there's no system one — copying it
+# unconditionally would shadow a correctly-linked system libmpv for anyone
+# with ~/.local/lib on their LD_LIBRARY_PATH, reintroducing the exact
+# "wrong libmpv ABI" crash this script is supposed to avoid.
+if ! pkg-config --exists mpv; then
+    cp -d lib/libmpv.so* "$PREFIX_LIB/" 2>/dev/null || true
+else
+    rm -f "$PREFIX_LIB"/libmpv.so*
+fi
 
 # Копіювання ресурсів
 cp -f resources/style.css "$PREFIX_DATA/andub/style.css"

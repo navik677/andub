@@ -1,4 +1,5 @@
 #include "player_view.hpp"
+#include "responsive.hpp"
 #include "../services/player_service.hpp"
 #include "../services/history_manager.hpp"
 #include "../utils/str_utils.hpp"
@@ -1053,6 +1054,13 @@ GtkWidget* PlayerView::create(
     gtk_box_append(GTK_BOX(controls_overlay), bottom_bar);
 
     gtk_overlay_add_overlay(GTK_OVERLAY(root_overlay), controls_overlay);
+
+    // Drop secondary controls when the window is too narrow for the full button row
+    on_layout_size_changed(root_overlay, [skip_op, vol_scale](LayoutSize size) {
+        const bool narrow = size == LayoutSize::Narrow;
+        gtk_widget_set_visible(skip_op, !narrow);
+        gtk_widget_set_visible(vol_scale, !narrow);
+    });
 
     // Periodic timer (250ms)
     state->timer_id = g_timeout_add(250, +[](gpointer data) -> gboolean {

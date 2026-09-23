@@ -64,6 +64,7 @@ src/providers/anistar_provider.cpp
 src/providers/anitube_provider.cpp
 src/providers/dreamcast_provider.cpp
 src/providers/shizaproject_provider.cpp
+src/ui/responsive.cpp
 src/ui/anime_card.cpp
 src/ui/details_view.cpp
 src/ui/downloads_view.cpp

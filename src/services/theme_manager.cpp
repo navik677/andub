@@ -1,4 +1,5 @@
 #include "theme_manager.hpp"
+#include <cmath>
 #include "../utils/json.hpp"
 #include <gtk/gtk.h>
 #include <fstream>
@@ -168,7 +169,19 @@ void ThemeManager::set_current_theme_id(const std::string& theme_id) {
     } catch (...) {}
 }
 
+// Readable text color for content drawn on top of `hex` (#rrggbb).
+static std::string contrast_text_for(const std::string& hex, const std::string& dark) {
+    if (hex.size() != 7 || hex[0] != '#') return "#ffffff";
+    auto channel = [&](size_t i) {
+        double c = std::stoi(hex.substr(i, 2), nullptr, 16) / 255.0;
+        return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+    double lum = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+    return lum > 0.35 ? dark : "#ffffff";
+}
+
 std::string ThemeManager::generate_css(const Theme& t) {
+    const std::string on_accent = contrast_text_for(t.accent, t.bg_color);
     return R"CSS(
 * {
     font-family: "Inter", "Cantarell", system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif;
@@ -405,7 +418,7 @@ dropdown > button selection {
 .nav-tab-btn:checked,
 .nav-tab-btn.active {
     background-color: )CSS" + t.accent + R"CSS(;
-    color: #ffffff;
+    color: )CSS" + on_accent + R"CSS(;
     font-weight: 600;
     border-color: transparent;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
@@ -588,7 +601,7 @@ flowboxchild:hover .card-title {
 
 .page-btn.active {
     background-color: )CSS" + t.accent + R"CSS(;
-    color: #ffffff;
+    color: )CSS" + on_accent + R"CSS(;
     font-weight: 700;
     border-color: transparent;
     box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
@@ -654,6 +667,11 @@ flowboxchild:hover .card-title {
 
 /* ===== Buttons ===== */
 button {
+    background-color: )CSS" + t.chip_bg + R"CSS(;
+    background-image: none;
+    border: 1px solid )CSS" + t.border_color + R"CSS(;
+    color: )CSS" + t.text_primary + R"CSS(;
+    box-shadow: none;
     border-radius: 8px;
     font-weight: 500;
     transition: transform 140ms cubic-bezier(0.2, 0.9, 0.3, 1),
@@ -663,8 +681,42 @@ button {
 }
 
 button:hover {
+    background-color: )CSS" + t.card_hover + R"CSS(;
+    border-color: )CSS" + t.accent + R"CSS(;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+button:disabled {
+    opacity: 0.5;
+}
+
+button:focus-visible {
+    outline: 2px solid )CSS" + t.accent + R"CSS(;
+    outline-offset: 1px;
+}
+
+/* Window controls keep a minimal look */
+windowcontrols button {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    color: )CSS" + t.text_secondary + R"CSS(;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 2px;
+}
+
+windowcontrols button:hover {
+    background-color: )CSS" + t.chip_bg + R"CSS(;
+    color: )CSS" + t.text_primary + R"CSS(;
+    transform: none;
+    box-shadow: none;
+}
+
+.header-section,
+.header-section > viewport {
+    background: transparent;
 }
 
 button:active {
@@ -673,7 +725,8 @@ button:active {
 
 button.suggested-action {
     background-color: )CSS" + t.accent + R"CSS(;
-    color: #ffffff;
+    background-image: none;
+    color: )CSS" + on_accent + R"CSS(;
     font-weight: 600;
     border-radius: 8px;
     padding: 7px 18px;
@@ -682,6 +735,7 @@ button.suggested-action {
 
 button.suggested-action:hover {
     background-color: )CSS" + t.accent_hover + R"CSS(;
+    border-color: transparent;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
 
@@ -979,7 +1033,7 @@ progressbar > trough > progress {
 
 .fav-exit-btn:hover {
     background-color: )CSS" + t.accent + R"CSS(;
-    color: #ffffff;
+    color: )CSS" + on_accent + R"CSS(;
     border-color: transparent;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     transform: translateY(-1px);
@@ -987,7 +1041,7 @@ progressbar > trough > progress {
 
 .fav-empty-btn {
     background-color: )CSS" + t.accent + R"CSS(;
-    color: #ffffff;
+    color: )CSS" + on_accent + R"CSS(;
     font-size: 14px;
     font-weight: 600;
     border-radius: 10px;
@@ -1002,6 +1056,36 @@ progressbar > trough > progress {
     background-color: )CSS" + t.accent_hover + R"CSS(;
     transform: translateY(-1px);
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+/* ===== Responsive (windowed) layout ===== */
+window.layout-compact headerbar {
+    padding: 6px 10px;
+}
+
+window.layout-narrow headerbar {
+    padding: 4px 6px;
+}
+
+window.layout-narrow .nav-tab-btn,
+window.layout-narrow .header-action-btn {
+    padding: 5px 8px;
+}
+
+window.layout-compact .details-title {
+    font-size: 21px;
+}
+
+window.layout-narrow .details-title {
+    font-size: 19px;
+}
+
+window.layout-narrow .details-desc {
+    font-size: 13px;
+}
+
+window.layout-narrow .episode-row {
+    padding: 8px 10px;
 }
 )CSS";
 }
