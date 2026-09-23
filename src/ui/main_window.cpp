@@ -81,7 +81,7 @@ struct AppState {
 
     GtkWidget* home_btn = nullptr;
     GtkWidget* fav_btn = nullptr;
-    GtkWidget* favorites_bar = nullptr;
+    GtkWidget* favorites_bar = nullptr; // GtkRevealer wrapping the banner
     GtkWidget* empty_fav_btn = nullptr;
 
     std::vector<std::shared_ptr<BaseProvider>> providers;
@@ -303,6 +303,7 @@ static gboolean on_search_results_ready(gpointer user_data) {
         gtk_spinner_stop(GTK_SPINNER(state->spinner));
         gtk_widget_set_visible(state->spinner, FALSE);
     }
+    gtk_widget_remove_css_class(state->flow_box, "refreshing");
 
     // Clear flow box
     GtkWidget* child = gtk_widget_get_first_child(state->flow_box);
@@ -344,7 +345,8 @@ static gboolean on_search_results_ready(gpointer user_data) {
         if (state->empty_fav_btn) {
             gtk_widget_set_visible(state->empty_fav_btn, FALSE);
         }
-        for (const auto& item : data->items) {
+        for (size_t i = 0; i < data->items.size(); ++i) {
+            const auto& item = data->items[i];
             GtkWidget* card = AnimeCard::create(
                 item,
                 [state](const Anime& anime) {
@@ -402,6 +404,10 @@ static gboolean on_search_results_ready(gpointer user_data) {
                 }
             );
 
+            // Staggered rise-in as the new page appears
+            gtk_widget_add_css_class(card, "enter");
+            gtk_widget_add_css_class(card, ThemeManager::stagger_class(i).c_str());
+
             gtk_flow_box_append(GTK_FLOW_BOX(state->flow_box), card);
             GtkWidget* child_widget = gtk_widget_get_parent(card);
             if (child_widget) {
@@ -432,6 +438,9 @@ static void do_search(AppState* state) {
         gtk_spinner_start(GTK_SPINNER(state->spinner));
     }
     gtk_widget_set_visible(state->status_label, FALSE);
+    if (state->empty_fav_btn) gtk_widget_set_visible(state->empty_fav_btn, FALSE);
+    // Dim the current results until the new ones replace them
+    gtk_widget_add_css_class(state->flow_box, "refreshing");
 
     std::string q = state->current_query;
     std::string genre = state->current_genre;
@@ -513,7 +522,7 @@ static void update_nav_ui(AppState* state) {
         }
     }
     if (state->favorites_bar) {
-        gtk_widget_set_visible(state->favorites_bar, state->is_favorites_mode);
+        gtk_revealer_set_reveal_child(GTK_REVEALER(state->favorites_bar), state->is_favorites_mode);
     }
 }
 
@@ -922,8 +931,12 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     gtk_widget_set_margin_end(fav_bar, 40);
     gtk_widget_set_margin_top(fav_bar, 14);
     gtk_widget_set_margin_bottom(fav_bar, 4);
-    gtk_widget_set_visible(fav_bar, FALSE);
-    state->favorites_bar = fav_bar;
+
+    GtkWidget* fav_revealer = gtk_revealer_new();
+    gtk_revealer_set_transition_type(GTK_REVEALER(fav_revealer), GTK_REVEALER_TRANSITION_TYPE_SLIDE_DOWN);
+    gtk_revealer_set_transition_duration(GTK_REVEALER(fav_revealer), 240);
+    gtk_revealer_set_child(GTK_REVEALER(fav_revealer), fav_bar);
+    state->favorites_bar = fav_revealer;
 
     GtkWidget* fav_title = gtk_label_new("⭐ Улюблені аніме");
     gtk_widget_add_css_class(fav_title, "favorites-banner-title");
@@ -948,7 +961,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     );
     gtk_box_append(GTK_BOX(fav_bar), fav_back_btn);
 
-    gtk_box_append(GTK_BOX(catalog_box), fav_bar);
+    gtk_box_append(GTK_BOX(catalog_box), fav_revealer);
 
     // Spinner and Status
     GtkWidget* status_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
@@ -993,6 +1006,7 @@ GtkWidget* MainWindow::create(GtkApplication* app) {
     state->scrolled_window = scrolled;
 
     GtkWidget* flow = gtk_flow_box_new();
+    gtk_widget_add_css_class(flow, "catalog-grid");
     gtk_widget_set_valign(flow, GTK_ALIGN_START);
     gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(flow), 1);
     gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(flow), 10);

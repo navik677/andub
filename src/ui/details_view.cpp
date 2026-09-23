@@ -5,6 +5,7 @@
 #include "../services/history_manager.hpp"
 #include "../services/favorites_manager.hpp"
 #include "../services/download_service.hpp"
+#include "../services/theme_manager.hpp"
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <thread>
 #include <vector>
@@ -42,6 +43,8 @@ static void populate_episodes(DetailsContext* ctx, const std::vector<Episode>& e
 
         GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
         gtk_widget_add_css_class(row, "episode-row");
+        gtk_widget_add_css_class(row, "enter");
+        gtk_widget_add_css_class(row, ThemeManager::stagger_class(ep_idx).c_str());
 
         // Watched icon
         GtkWidget* mark_lbl = gtk_label_new(is_watched ? "✓" : "  ");
@@ -227,6 +230,7 @@ GtkWidget* DetailsView::create(
 
     // Top action bar
     GtkWidget* top_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(top_bar, "details-topbar");
 
     GtkWidget* back_btn = gtk_button_new_with_label("Назад");
     auto* back_cb = new std::function<void()>(std::move(on_back));
@@ -245,6 +249,8 @@ GtkWidget* DetailsView::create(
     // Favorite button
     bool is_fav = FavoritesManager::is_favorite(anime.provider, anime.id);
     GtkWidget* fav_btn = gtk_button_new_with_label(is_fav ? "В улюблених" : "Додати в улюблені");
+    gtk_widget_add_css_class(fav_btn, "fav-toggle");
+    if (is_fav) gtk_widget_add_css_class(fav_btn, "is-fav");
     struct FavData { Anime anime; GtkWidget* btn; };
     auto* fd = new FavData{anime, fav_btn};
     g_signal_connect_data(
@@ -253,6 +259,12 @@ GtkWidget* DetailsView::create(
             auto* d = static_cast<FavData*>(user_data);
             bool added = FavoritesManager::toggle_favorite(d->anime);
             gtk_button_set_label(GTK_BUTTON(d->btn), added ? "В улюблених" : "Додати в улюблені");
+            if (added) gtk_widget_add_css_class(d->btn, "is-fav");
+            else gtk_widget_remove_css_class(d->btn, "is-fav");
+            // Alternate between two identical keyframes so the pop restarts on every click
+            bool was_a = gtk_widget_has_css_class(d->btn, "pop-a");
+            gtk_widget_remove_css_class(d->btn, was_a ? "pop-a" : "pop-b");
+            gtk_widget_add_css_class(d->btn, was_a ? "pop-b" : "pop-a");
         }),
         fd,
         [](gpointer data, GClosure*) { delete static_cast<FavData*>(data); },
@@ -272,6 +284,7 @@ GtkWidget* DetailsView::create(
 
     // Left column: Poster & Meta
     GtkWidget* left_col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
+    gtk_widget_add_css_class(left_col, "details-enter-left");
     gtk_widget_set_size_request(left_col, 220, -1);
 
     GtkWidget* poster_frame = gtk_overlay_new();
@@ -286,39 +299,46 @@ GtkWidget* DetailsView::create(
     gtk_overlay_set_child(GTK_OVERLAY(poster_frame), poster);
     gtk_box_append(GTK_BOX(left_col), poster_frame);
 
+    gtk_widget_add_css_class(poster, "poster-image");
     if (!anime.poster_url.empty()) {
-        std::thread([poster_ptr = poster, url = anime.poster_url]() {
-            std::string path = ImageCache::ensure_image(url);
-            if (!path.empty()) {
-                g_idle_add(+[](gpointer p) -> gboolean {
-                    auto* d = static_cast<std::pair<GtkWidget*, std::string>*>(p);
-                    if (GTK_IS_PICTURE(d->first)) {
-                        GError* err = nullptr;
-                        GdkPixbuf* pb = gdk_pixbuf_new_from_file_at_scale(d->second.c_str(), 220, 315, FALSE, &err);
-                        if (pb) {
-                            GdkTexture* texture = gdk_texture_new_for_pixbuf(pb);
-                            if (texture) {
-                                gtk_picture_set_paintable(GTK_PICTURE(d->first), GDK_PAINTABLE(texture));
-                                g_object_unref(texture);
-                            }
-                            g_object_unref(pb);
+        gtk_widget_add_css_class(poster_frame, "loading");
+        struct PosterData { GtkWidget* picture; GtkWidget* frame; std::string path; };
+        // Strong refs keep both widgets valid even if the view is closed before the download ends
+        auto* pd = new PosterData{GTK_WIDGET(g_object_ref(poster)), GTK_WIDGET(g_object_ref(poster_frame)), {}};
+        std::thread([pd, url = anime.poster_url]() {
+            pd->path = ImageCache::ensure_image(url);
+            g_idle_add(+[](gpointer p) -> gboolean {
+                auto* d = static_cast<PosterData*>(p);
+                if (!d->path.empty()) {
+                    GError* err = nullptr;
+                    GdkPixbuf* pb = gdk_pixbuf_new_from_file_at_scale(d->path.c_str(), 220, 315, FALSE, &err);
+                    if (pb) {
+                        GdkTexture* texture = gdk_texture_new_for_pixbuf(pb);
+                        if (texture) {
+                            gtk_picture_set_paintable(GTK_PICTURE(d->picture), GDK_PAINTABLE(texture));
+                            g_object_unref(texture);
+                        }
+                        g_object_unref(pb);
+                    } else {
+                        if (err) g_error_free(err);
+                        GError* err2 = nullptr;
+                        GdkTexture* texture = gdk_texture_new_from_filename(d->path.c_str(), &err2);
+                        if (texture) {
+                            gtk_picture_set_paintable(GTK_PICTURE(d->picture), GDK_PAINTABLE(texture));
+                            g_object_unref(texture);
                         } else {
-                            if (err) g_error_free(err);
-                            GError* err2 = nullptr;
-                            GdkTexture* texture = gdk_texture_new_from_filename(d->second.c_str(), &err2);
-                            if (texture) {
-                                gtk_picture_set_paintable(GTK_PICTURE(d->first), GDK_PAINTABLE(texture));
-                                g_object_unref(texture);
-                            } else {
-                                if (err2) g_error_free(err2);
-                                gtk_picture_set_filename(GTK_PICTURE(d->first), d->second.c_str());
-                            }
+                            if (err2) g_error_free(err2);
+                            gtk_picture_set_filename(GTK_PICTURE(d->picture), d->path.c_str());
                         }
                     }
-                    delete d;
-                    return G_SOURCE_REMOVE;
-                }, new std::pair<GtkWidget*, std::string>(poster_ptr, path));
-            }
+                }
+                gtk_widget_remove_css_class(d->frame, "loading");
+                gtk_widget_add_css_class(d->picture, "loaded");
+                g_object_unref(d->picture);
+                g_object_unref(d->frame);
+                delete d;
+                return G_SOURCE_REMOVE;
+            }, pd);
         }).detach();
     }
 
@@ -339,6 +359,7 @@ GtkWidget* DetailsView::create(
 
     // Right column: Info & Episodes
     GtkWidget* right_col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
+    gtk_widget_add_css_class(right_col, "details-enter-right");
     gtk_widget_set_hexpand(right_col, TRUE);
 
     GtkWidget* title_lbl = gtk_label_new(anime.title_ru.c_str());
@@ -450,6 +471,15 @@ GtkWidget* DetailsView::create(
                             gtk_picture_set_filename(GTK_PICTURE(d->first), d->second.c_str());
                         }
                         gtk_widget_add_css_class(d->first, "loaded");
+
+                        // Respect the desktop's "reduce animations" setting: fade straight to a static level
+                        gboolean animations = TRUE;
+                        g_object_get(gtk_widget_get_settings(d->first), "gtk-enable-animations", &animations, nullptr);
+                        if (!animations) {
+                            gtk_widget_set_opacity(d->first, 0.55);
+                            delete d;
+                            return G_SOURCE_REMOVE;
+                        }
 
                         struct AnimState {
                             gint64 start_time = 0;

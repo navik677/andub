@@ -145,22 +145,41 @@ static void update_inhibit(PlayerState* state, bool should_inhibit) {
     }
 }
 
+// Duration of the .player-osd opacity/scale transition in the theme CSS
+static constexpr int OSD_FADE_MS = 180;
+
 static void show_osd(PlayerState* state, const std::string& text, int duration_ms = 1200) {
     if (!state->osd_label) return;
     gtk_label_set_text(GTK_LABEL(state->osd_label), text.c_str());
-    gtk_widget_set_visible(state->osd_label, TRUE);
 
     if (state->osd_timeout_id > 0) {
         g_source_remove(state->osd_timeout_id);
         state->osd_timeout_id = 0;
     }
 
+    if (!gtk_widget_get_visible(state->osd_label)) {
+        // Show it in the hidden state first, then drop the class on the next frame so the fade-in runs
+        gtk_widget_add_css_class(state->osd_label, "osd-hidden");
+        gtk_widget_set_visible(state->osd_label, TRUE);
+        gtk_widget_add_tick_callback(state->osd_label, +[](GtkWidget* w, GdkFrameClock*, gpointer) -> gboolean {
+            gtk_widget_remove_css_class(w, "osd-hidden");
+            return G_SOURCE_REMOVE;
+        }, nullptr, nullptr);
+    } else {
+        gtk_widget_remove_css_class(state->osd_label, "osd-hidden");
+    }
+
     state->osd_timeout_id = g_timeout_add(duration_ms, +[](gpointer data) -> gboolean {
         auto* s = static_cast<PlayerState*>(data);
-        if (s && s->osd_label) {
-            gtk_widget_set_visible(s->osd_label, FALSE);
-            s->osd_timeout_id = 0;
-        }
+        if (!s || !s->osd_label) return G_SOURCE_REMOVE;
+        // Fade out, then hide once the transition has finished
+        gtk_widget_add_css_class(s->osd_label, "osd-hidden");
+        s->osd_timeout_id = g_timeout_add(OSD_FADE_MS, +[](gpointer d) -> gboolean {
+            auto* st = static_cast<PlayerState*>(d);
+            if (st && st->osd_label) gtk_widget_set_visible(st->osd_label, FALSE);
+            st->osd_timeout_id = 0;
+            return G_SOURCE_REMOVE;
+        }, s);
         return G_SOURCE_REMOVE;
     }, state);
 }

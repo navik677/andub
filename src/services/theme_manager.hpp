@@ -31,6 +31,13 @@ public:
     static void apply_theme(const std::string& theme_id);
     static std::string generate_css(const Theme& theme);
     static std::string get_config_file();
+
+    // Number of `stagger-N` delay classes available for list entrance animations
+    static constexpr int STAGGER_STEPS = 12;
+    static std::string stagger_class(size_t index);
+
+private:
+    static std::string stagger_css();
 };
 
 } // namespace anime
