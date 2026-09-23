@@ -1,4 +1,5 @@
 #include "details_view.hpp"
+#include "responsive.hpp"
 #include "../services/image_cache.hpp"
 #include "../services/player_service.hpp"
 #include "../services/history_manager.hpp"
@@ -50,6 +51,7 @@ static void populate_episodes(DetailsContext* ctx, const std::vector<Episode>& e
         // Title
         GtkWidget* title_lbl = gtk_label_new(ep.display_title().c_str());
         gtk_widget_set_hexpand(title_lbl, TRUE);
+        gtk_label_set_ellipsize(GTK_LABEL(title_lbl), PANGO_ELLIPSIZE_END);
         gtk_label_set_xalign(GTK_LABEL(title_lbl), 0.0f);
         gtk_box_append(GTK_BOX(row), title_lbl);
 
@@ -347,6 +349,7 @@ GtkWidget* DetailsView::create(
 
     if (!anime.title_en.empty() && anime.title_en != anime.title_ru) {
         GtkWidget* en_lbl = gtk_label_new(anime.title_en.c_str());
+        gtk_label_set_wrap(GTK_LABEL(en_lbl), TRUE);
         gtk_label_set_xalign(GTK_LABEL(en_lbl), 0.0f);
         gtk_widget_add_css_class(en_lbl, "card-meta");
         gtk_box_append(GTK_BOX(right_col), en_lbl);
@@ -405,6 +408,21 @@ GtkWidget* DetailsView::create(
     gtk_box_append(GTK_BOX(content_box), right_col);
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), content_box);
     gtk_box_append(GTK_BOX(main_box), scrolled);
+
+    // Responsive layout: stack the poster above the info column in narrow windows
+    on_layout_size_changed(root_overlay, [main_box, content_box, left_col](LayoutSize size) {
+        const bool narrow = size == LayoutSize::Narrow;
+        const int side = size == LayoutSize::Wide ? 36 : (narrow ? 12 : 20);
+        gtk_widget_set_margin_start(main_box, side);
+        gtk_widget_set_margin_end(main_box, side);
+        gtk_widget_set_margin_top(main_box, narrow ? 12 : 24);
+        gtk_widget_set_margin_bottom(main_box, narrow ? 12 : 36);
+
+        gtk_orientable_set_orientation(GTK_ORIENTABLE(content_box),
+                                       narrow ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL);
+        gtk_box_set_spacing(GTK_BOX(content_box), narrow ? 20 : (size == LayoutSize::Wide ? 32 : 24));
+        gtk_widget_set_halign(left_col, narrow ? GTK_ALIGN_CENTER : GTK_ALIGN_FILL);
+    });
 
     // Fetch episodes in thread
     auto* ctx = new DetailsContext{anime, provider, eps_box, spinner, prog_lbl, fav_btn, std::move(on_play_episode)};

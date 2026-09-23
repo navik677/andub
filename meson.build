@@ -56,6 +56,7 @@ sources = files(
   'src/providers/anitube_provider.cpp',
   'src/providers/animevost_provider.cpp',
   'src/providers/anistar_provider.cpp',
+  'src/ui/responsive.cpp',
   'src/ui/anime_card.cpp',
   'src/ui/details_view.cpp',
   'src/ui/player_view.cpp',
