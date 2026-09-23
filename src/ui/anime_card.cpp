@@ -11,13 +11,14 @@ struct CardCallbackData {
 };
 
 struct PosterAsyncData {
-    GtkWidget* picture;
-    std::string path;
+    GtkWidget* picture; // strong ref, released in on_poster_ready
+    GtkWidget* frame;   // strong ref
+    std::string path;   // empty when the download failed
 };
 
 static gboolean on_poster_ready(gpointer user_data) {
     auto* data = static_cast<PosterAsyncData*>(user_data);
-    if (GTK_IS_PICTURE(data->picture) && !data->path.empty()) {
+    if (!data->path.empty()) {
         GError* err = nullptr;
         // Standard anime portrait poster ratio (188x265)
         GdkPixbuf* pb = gdk_pixbuf_new_from_file_at_scale(data->path.c_str(), 188, 265, FALSE, &err);
@@ -37,6 +38,11 @@ static gboolean on_poster_ready(gpointer user_data) {
             }
         }
     }
+    // Stop the skeleton pulse and fade the poster in
+    gtk_widget_remove_css_class(data->frame, "loading");
+    gtk_widget_add_css_class(data->picture, "loaded");
+    g_object_unref(data->picture);
+    g_object_unref(data->frame);
     delete data;
     return G_SOURCE_REMOVE;
 }
@@ -65,6 +71,7 @@ GtkWidget* AnimeCard::create(const Anime& anime, std::function<void(const Anime&
     gtk_picture_set_content_fit(GTK_PICTURE(picture), GTK_CONTENT_FIT_COVER);
     gtk_widget_set_hexpand(picture, FALSE);
     gtk_widget_set_vexpand(picture, FALSE);
+    gtk_widget_add_css_class(picture, "poster-image");
     gtk_overlay_set_child(GTK_OVERLAY(poster_frame), picture);
 
     // Rating / Popularity badge — top-left of poster
@@ -158,12 +165,13 @@ GtkWidget* AnimeCard::create(const Anime& anime, std::function<void(const Anime&
 
     // Asynchronously load poster
     if (!anime.poster_url.empty()) {
-        std::thread([picture_ptr = picture, url = anime.poster_url]() {
-            std::string local_path = ImageCache::ensure_image(url);
-            if (!local_path.empty()) {
-                auto* d = new PosterAsyncData{picture_ptr, local_path};
-                g_idle_add(on_poster_ready, d);
-            }
+        gtk_widget_add_css_class(poster_frame, "loading");
+        auto* d = new PosterAsyncData{
+            GTK_WIDGET(g_object_ref(picture)), GTK_WIDGET(g_object_ref(poster_frame)), {}
+        };
+        std::thread([d, url = anime.poster_url]() {
+            d->path = ImageCache::ensure_image(url);
+            g_idle_add(on_poster_ready, d);
         }).detach();
     }
 

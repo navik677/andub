@@ -1,4 +1,5 @@
 #include "theme_manager.hpp"
+#include <algorithm>
 #include <cmath>
 #include "../utils/json.hpp"
 #include <gtk/gtk.h>
@@ -1087,7 +1088,140 @@ window.layout-narrow .details-desc {
 window.layout-narrow .episode-row {
     padding: 8px 10px;
 }
+
+/* ===== Entrance & state animations ===== */
+@keyframes rise-in {
+    from { opacity: 0; transform: translateY(18px) scale(0.97); }
+    to   { opacity: 1; transform: none; }
+}
+
+@keyframes slide-in-left {
+    from { opacity: 0; transform: translateX(-24px); }
+    to   { opacity: 1; transform: none; }
+}
+
+@keyframes slide-in-right {
+    from { opacity: 0; transform: translateX(24px); }
+    to   { opacity: 1; transform: none; }
+}
+
+@keyframes skeleton-pulse {
+    from { background-color: )CSS" + t.card_bg + R"CSS(; }
+    to   { background-color: )CSS" + t.card_hover + R"CSS(; }
+}
+
+@keyframes pop-a {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.08); }
+    100% { transform: scale(1); }
+}
+
+@keyframes pop-b {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.08); }
+    100% { transform: scale(1); }
+}
+
+.anime-card.enter {
+    animation: rise-in 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.episode-row.enter {
+    animation: slide-in-right 320ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+)CSS" + stagger_css() + R"CSS(
+
+.anime-poster-frame.loading,
+.details-poster-frame.loading {
+    animation: skeleton-pulse 900ms ease-in-out infinite alternate;
+}
+
+.poster-image {
+    opacity: 0;
+    transition: opacity 360ms ease-out;
+}
+
+.poster-image.loaded {
+    opacity: 1;
+}
+
+.details-poster-frame {
+    border-radius: 14px;
+    background-color: )CSS" + t.card_bg + R"CSS(;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.details-poster-frame picture {
+    border-radius: 14px;
+}
+
+.details-enter-left {
+    animation: slide-in-left 460ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.details-enter-right {
+    animation: slide-in-right 460ms cubic-bezier(0.16, 1, 0.3, 1) 80ms backwards;
+}
+
+.details-topbar {
+    animation: rise-in 360ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+button.fav-toggle.is-fav {
+    background-color: )CSS" + t.accent + R"CSS(;
+    color: )CSS" + on_accent + R"CSS(;
+    border-color: transparent;
+}
+
+button.fav-toggle.is-fav:hover {
+    background-color: )CSS" + t.accent_hover + R"CSS(;
+}
+
+button.fav-toggle.pop-a {
+    animation: pop-a 320ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+button.fav-toggle.pop-b {
+    animation: pop-b 320ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+/* Existing results dim while a new page/search is loading */
+.catalog-grid {
+    transition: opacity 220ms ease;
+}
+
+.catalog-grid.refreshing {
+    opacity: 0.35;
+}
+
+/* Player OSD fades and scales instead of popping */
+.player-osd {
+    transition: opacity 180ms ease, transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    opacity: 1;
+    transform: none;
+}
+
+.player-osd.osd-hidden {
+    opacity: 0;
+    transform: scale(0.92);
+}
 )CSS";
+}
+
+std::string ThemeManager::stagger_class(size_t index) {
+    size_t step = std::min(index, static_cast<size_t>(STAGGER_STEPS - 1));
+    return "stagger-" + std::to_string(step);
+}
+
+std::string ThemeManager::stagger_css() {
+    // Delay classes for staggered list entrances; later items share the last step
+    std::string css;
+    for (int i = 0; i < STAGGER_STEPS; ++i) {
+        css += ".enter.stagger-" + std::to_string(i) + " { animation-delay: " + std::to_string(i * 35) + "ms; }\n";
+    }
+    return css;
 }
 
 void ThemeManager::apply_theme(const std::string& theme_id) {
