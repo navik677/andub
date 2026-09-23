@@ -50,6 +50,9 @@ cp "$ROOT_DIR/resources/anime-gui.png" "$APPDIR/usr/share/icons/hicolor/256x256/
 cp "$ROOT_DIR/desktop/anime-gui.desktop" "$APPDIR/anime-gui.desktop"
 cp "$ROOT_DIR/desktop/anime-gui.desktop" "$APPDIR/usr/share/applications/anime-gui.desktop"
 
+mkdir -p "$APPDIR/usr/share/andub"
+cp -r "$ROOT_DIR/resources/shaders" "$APPDIR/usr/share/andub/shaders"
+
 # 5. Copy GTK4 GSettings schemas
 if [ -d "/usr/share/glib-2.0/schemas" ]; then
     cp -r /usr/share/glib-2.0/schemas/*gtk* "$APPDIR/usr/share/glib-2.0/schemas/" 2>/dev/null || true
