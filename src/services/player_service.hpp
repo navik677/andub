@@ -16,6 +16,10 @@ public:
     static PlayerMode get_player_mode();
     static void set_player_mode(PlayerMode mode);
 
+    // Generic string values in settings.json
+    static std::string get_setting(const std::string& key, const std::string& fallback = "");
+    static void set_setting(const std::string& key, const std::string& value);
+
     static bool play(const Quality& quality, const std::string& anime_title, const Episode* episode = nullptr);
     static bool play_external(const Quality& quality, const std::string& anime_title, const Episode* episode = nullptr, double start_pos = 0.0);
 

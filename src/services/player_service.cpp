@@ -63,7 +63,25 @@ PlayerMode PlayerService::get_player_mode() {
 void PlayerService::set_player_mode(PlayerMode mode) {
     s_player_mode = mode;
     s_mode_loaded = true;
+    set_setting("player_mode", mode == PlayerMode::ExternalMpv ? "external" : "embedded");
+}
 
+std::string PlayerService::get_setting(const std::string& key, const std::string& fallback) {
+    try {
+        std::string cfg_path = get_config_path();
+        if (!std::filesystem::exists(cfg_path)) return fallback;
+        std::ifstream f(cfg_path);
+        std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        auto root = json::Value::parse(content);
+        if (root.is_object() && root.contains(key)) {
+            std::string v = root[key].get_str();
+            if (!v.empty()) return v;
+        }
+    } catch (...) {}
+    return fallback;
+}
+
+void PlayerService::set_setting(const std::string& key, const std::string& value) {
     try {
         std::string cfg_path = get_config_path();
         json::Value root;
@@ -72,7 +90,7 @@ void PlayerService::set_player_mode(PlayerMode mode) {
             std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
             root = json::Value::parse(content);
         }
-        root["player_mode"] = (mode == PlayerMode::ExternalMpv ? "external" : "embedded");
+        root[key] = value;
 
         std::ofstream out(cfg_path);
         out << root.dump(2);

@@ -15,6 +15,7 @@ rm -f "$PREFIX_BIN/anime-tui"
 rm -f "$PREFIX_DATA/applications/anime-gui.desktop"
 rm -f "$PREFIX_DATA/icons/hicolor/256x256/apps/anime-gui.png"
 rm -rf "$PREFIX_DATA/anime-gui"
+rm -rf "$PREFIX_DATA/andub/shaders"
 
 # 3. Видалення кешу та налаштувань за бажанням
 if [ -d "$HOME/.cache/anime-gui" ]; then

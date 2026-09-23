@@ -59,6 +59,8 @@ fi
 
 # Копіювання ресурсів
 cp -f resources/style.css "$PREFIX_DATA/andub/style.css"
+rm -rf "$PREFIX_DATA/andub/shaders"
+cp -r resources/shaders "$PREFIX_DATA/andub/shaders"
 if [ -f "resources/anime-gui.png" ]; then
     cp -f resources/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/andub.png"
 elif [ -f "desktop/anime-gui.png" ]; then

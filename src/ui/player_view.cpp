@@ -2,6 +2,7 @@
 #include "responsive.hpp"
 #include "../services/player_service.hpp"
 #include "../services/history_manager.hpp"
+#include "../services/upscaler.hpp"
 #include "../utils/str_utils.hpp"
 #ifdef _WIN32
 #include <windows.h>
@@ -97,6 +98,7 @@ struct PlayerState {
     GtkWidget* vol_btn = nullptr;
     GtkWidget* vol_scale = nullptr;
     GtkWidget* fs_btn = nullptr;
+    GtkWidget* upscale_btn = nullptr;
 
     // mpv
     mpv_handle* mpv = nullptr;
@@ -115,6 +117,7 @@ struct PlayerState {
     guint timer_id = 0;
     guint osd_timeout_id = 0;
     guint autohide_id = 0;
+    size_t upscale_idx = 0;
 
     std::shared_ptr<std::atomic<bool>> is_alive = std::make_shared<std::atomic<bool>>(true);
 
@@ -353,6 +356,27 @@ static void show_controls(PlayerState* state) {
         }
         return G_SOURCE_REMOVE;
     }, state);
+}
+
+static void set_upscaler(PlayerState* state, size_t idx, bool announce) {
+    const auto& profiles = Upscaler::profiles();
+    if (idx >= profiles.size()) idx = 0;
+    const auto& profile = profiles[idx];
+    state->upscale_idx = idx;
+
+    bool ok = Upscaler::apply(state->mpv, profile);
+    if (state->upscale_btn) {
+        gtk_button_set_label(GTK_BUTTON(state->upscale_btn), ("Апскейл: " + profile.name).c_str());
+    }
+    if (announce) {
+        Upscaler::save_profile(profile.id);
+        show_controls(state);
+        show_osd(state, ok ? "Апскейл: " + profile.name : "Шейдери апскейлу не знайдено", 1500);
+    }
+}
+
+static void cycle_upscaler(PlayerState* state) {
+    set_upscaler(state, (state->upscale_idx + 1) % Upscaler::profiles().size(), true);
 }
 
 static void load_episode(PlayerState* state, size_t idx);
@@ -1018,6 +1042,20 @@ GtkWidget* PlayerView::create(
     );
     gtk_box_append(GTK_BOX(btn_row), skip_op);
 
+    GtkWidget* upscale_btn = gtk_button_new_with_label("Апскейл: Вимк");
+    state->upscale_btn = upscale_btn;
+    gtk_widget_add_css_class(upscale_btn, "player-btn-chip");
+    gtk_widget_set_tooltip_text(upscale_btn, "Апскейлер: Вимк → FSR → FSRCNNX → Anime4K → Anime4K HQ (Ctrl+U)");
+    g_signal_connect_data(
+        upscale_btn, "clicked",
+        G_CALLBACK(+[](GtkButton*, gpointer user_data) { cycle_upscaler(static_cast<PlayerState*>(user_data)); }),
+        state,
+        nullptr,
+        static_cast<GConnectFlags>(0)
+    );
+    gtk_box_append(GTK_BOX(btn_row), upscale_btn);
+    set_upscaler(state, Upscaler::index_of(Upscaler::get_saved_profile()), false);
+
     GtkWidget* spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_hexpand(spacer, TRUE);
     gtk_box_append(GTK_BOX(btn_row), spacer);
@@ -1144,8 +1182,15 @@ GtkWidget* PlayerView::create(
     GtkEventController* key_ctrl = gtk_event_controller_key_new();
     g_signal_connect_data(
         key_ctrl, "key-pressed",
-        G_CALLBACK((+[](GtkEventControllerKey*, guint keyval, guint, GdkModifierType, gpointer user_data) -> gboolean {
+        G_CALLBACK((+[](GtkEventControllerKey*, guint keyval, guint, GdkModifierType mods, gpointer user_data) -> gboolean {
             auto* s = static_cast<PlayerState*>(user_data);
+            // Ctrl+U; Cyrillic ghe is what the U key sends in Ukrainian/Russian layouts
+            if ((mods & GDK_CONTROL_MASK) &&
+                (keyval == GDK_KEY_u || keyval == GDK_KEY_U ||
+                 keyval == GDK_KEY_Cyrillic_ghe || keyval == GDK_KEY_Cyrillic_GHE)) {
+                cycle_upscaler(s);
+                return TRUE;
+            }
             switch (keyval) {
                 case GDK_KEY_space:
                     toggle_pause(s);

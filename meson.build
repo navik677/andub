@@ -31,6 +31,9 @@ endif
 extra_c_args = []
 deps = [gtk4_dep, threads_dep, dl_dep, mpv_dep]
 
+# Lets a build run straight from build/ find resources/shaders without installing
+extra_c_args += '-DANDUB_SOURCE_SHADER_DIR="' + (meson.current_source_dir() / 'resources' / 'shaders') + '"'
+
 if curl_dep.found()
   deps += curl_dep
   extra_c_args += '-DHAVE_LIBCURL'
@@ -48,6 +51,7 @@ sources = files(
   'src/services/favorites_manager.cpp',
   'src/services/download_service.cpp',
   'src/services/theme_manager.cpp',
+  'src/services/upscaler.cpp',
   'src/providers/anilibria_provider.cpp',
   'src/providers/dreamcast_provider.cpp',
   'src/providers/shizaproject_provider.cpp',
@@ -86,5 +90,10 @@ executable('andub',
 
 install_data(
   'resources/style.css',
+  install_dir: get_option('datadir') / 'andub'
+)
+
+install_subdir(
+  'resources/shaders',
   install_dir: get_option('datadir') / 'andub'
 )

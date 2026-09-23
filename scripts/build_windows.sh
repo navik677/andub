@@ -52,6 +52,7 @@ src/utils/http_client.cpp
 src/utils/kodik_resolver.cpp
 src/services/image_cache.cpp
 src/services/player_service.cpp
+src/services/upscaler.cpp
 src/services/history_manager.cpp
 src/services/favorites_manager.cpp
 src/services/download_service.cpp
@@ -107,6 +108,7 @@ cp "$BUILD_DIR/anime-gui.exe" "$WIN_BUNDLE_DIR/anime-gui.exe"
 cp "$ROOT_DIR/resources/style.css" "$WIN_BUNDLE_DIR/resources/"
 cp "$ROOT_DIR/resources/anime-gui.png" "$WIN_BUNDLE_DIR/resources/"
 cp "$ROOT_DIR/resources/andub.ico" "$WIN_BUNDLE_DIR/resources/"
+cp -r "$ROOT_DIR/resources/shaders" "$WIN_BUNDLE_DIR/resources/"
 
 # Copy all required DLLs from sysroot bin
 echo -e "\033[1;34m==> Копіювання необхідних DLL бібліотек...\033[0m"
