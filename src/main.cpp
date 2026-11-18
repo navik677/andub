@@ -1,8 +1,63 @@
-#include "application.hpp"
+#include <QFontDatabase>
+#include <QGuiApplication>
+#include <QIcon>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQuickStyle>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
+#include <QTimer>
+#include <clocale>
+
+#ifdef HAVE_LIBCURL
+#include <curl/curl.h>
+#endif
+
+#include "app/poster_provider.hpp"
 
 int main(int argc, char* argv[]) {
-    GtkApplication* app = anime::Application::create();
-    int status = g_application_run(G_APPLICATION(app), argc, argv);
-    g_object_unref(app);
-    return status;
+#ifdef HAVE_LIBCURL
+    // Must happen before any worker thread touches curl
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+#endif
+
+    // The embedded player renders through mpv's OpenGL API, so the scene graph
+    // has to use OpenGL on every platform (Qt would pick D3D11/Metal otherwise).
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
+
+    QGuiApplication app(argc, argv);
+    QGuiApplication::setApplicationName(QStringLiteral("Andub"));
+    QGuiApplication::setApplicationVersion(QStringLiteral(ANDUB_VERSION));
+    QGuiApplication::setOrganizationName(QStringLiteral("Andub"));
+    QGuiApplication::setDesktopFileName(QStringLiteral("andub"));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Andub/resources/andub.svg")));
+    std::setlocale(LC_NUMERIC, "C");
+
+    QFontDatabase::addApplicationFont(QStringLiteral(":/qt/qml/Andub/resources/fonts/Manrope.ttf"));
+    QFont font(QStringLiteral("Manrope"));
+    font.setPixelSize(14);
+    font.setHintingPreference(QFont::PreferNoHinting);
+    QGuiApplication::setFont(font);
+
+    QQmlApplicationEngine engine;
+    engine.addImageProvider(QStringLiteral("poster"), new anime::app::PosterProvider());
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
+                     [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
+    // Development aid for screenshots: ANDUB_DEV_ACTION=details:<row>|play:<row>|settings|downloads|favorites
+    engine.rootContext()->setContextProperty(QStringLiteral("devAction"), qEnvironmentVariable("ANDUB_DEV_ACTION"));
+    engine.loadFromModule("Andub", "Main");
+
+    // Development aid: ANDUB_SNAPSHOT=out.png [ANDUB_SNAPSHOT_DELAY=ms] renders
+    // the window to a file and exits (works with QT_QPA_PLATFORM=offscreen).
+    if (const QString out = qEnvironmentVariable("ANDUB_SNAPSHOT"); !out.isEmpty()) {
+        const int delay = qEnvironmentVariableIntValue("ANDUB_SNAPSHOT_DELAY");
+        QTimer::singleShot(delay > 0 ? delay : 4000, &app, [&engine, out] {
+            if (auto* w = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0)))
+                w->grabWindow().save(out);
+            QCoreApplication::quit();
+        });
+    }
+
+    return app.exec();
 }

@@ -1,21 +1,24 @@
-id ICON "andub.ico"
+#include <winuser.h>
+
+IDI_ICON1 ICON "andub.ico"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "andub.manifest"
 
 1 VERSIONINFO
-FILEVERSION     1,0,0,0
-PRODUCTVERSION  1,0,0,0
+FILEVERSION     2,0,0,0
+PRODUCTVERSION  2,0,0,0
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
     BLOCK "040904E4"
     BEGIN
-      VALUE "CompanyName", "Andub"
-      VALUE "FileDescription", "Andub Anime Player"
-      VALUE "FileVersion", "1.0.0"
+      VALUE "CompanyName", "navik677"
+      VALUE "FileDescription", "Andub"
+      VALUE "FileVersion", "2.0.0"
       VALUE "InternalName", "andub"
-      VALUE "LegalCopyright", "Andub"
+      VALUE "LegalCopyright", "navik677"
       VALUE "OriginalFilename", "andub.exe"
       VALUE "ProductName", "Andub"
-      VALUE "ProductVersion", "1.0.0"
+      VALUE "ProductVersion", "2.0.0"
     END
   END
   BLOCK "VarFileInfo"

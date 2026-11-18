@@ -20,6 +20,14 @@ size_t write_callback(void* contents, size_t size, size_t nmemb, void* userp) {
 size_t file_write_callback(void* ptr, size_t size, size_t nmemb, FILE* stream) {
     return fwrite(ptr, size, nmemb, stream);
 }
+
+// The Windows build ships libcurl without a CA bundle next to it; use the
+// system certificate store instead so HTTPS works out of the box.
+void apply_platform_tls([[maybe_unused]] CURL* curl) {
+#ifdef _WIN32
+    curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, static_cast<long>(CURLSSLOPT_NATIVE_CA));
+#endif
+}
 } // namespace
 #endif
 
@@ -38,6 +46,7 @@ Response Client::get(const std::string& url, const std::map<std::string, std::st
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec));
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0");
+    apply_platform_tls(curl);
 
     if (!cookie_file.empty()) {
         curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookie_file.c_str());
@@ -124,6 +133,7 @@ Response Client::post(const std::string& url, const std::string& data, const std
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec));
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0");
+    apply_platform_tls(curl);
 
     if (!cookie_file.empty()) {
         curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookie_file.c_str());
@@ -226,8 +236,11 @@ bool Client::download_file(const std::string& url, const std::string& dest_path,
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec));
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0");
+    apply_platform_tls(curl);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, file_write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+    // Don't cache a 404/403 error page as if it were an image
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
 
     CURLcode res = curl_easy_perform(curl);
     fclose(fp);

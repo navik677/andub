@@ -1,14 +1,15 @@
 #include "image_cache.hpp"
 #include "../utils/http_client.hpp"
-#include <cstdlib>
+#include "../utils/paths.hpp"
+#include <filesystem>
+#include <mutex>
+#include <set>
+#include <condition_variable>
 #include <sstream>
-#include <iomanip>
-#include <cmath>
-#include <vector>
-#include <algorithm>
-#include <gdk-pixbuf/gdk-pixbuf.h>
 
 namespace anime {
+
+namespace fs = std::filesystem;
 
 static std::string simple_hash(const std::string& str) {
     size_t h = 5381;
@@ -21,157 +22,51 @@ static std::string simple_hash(const std::string& str) {
 }
 
 std::string ImageCache::get_cache_dir() {
-    const char* xdg = std::getenv("XDG_CACHE_HOME");
-    const char* home = std::getenv("HOME");
-    std::string base;
-    if (xdg && *xdg) base = xdg;
-    else if (home && *home) base = std::string(home) + "/.cache";
-    else base = "/tmp";
-
-    std::string dir = base + "/anime-gui/covers";
-    try {
-        std::filesystem::create_directories(dir);
-    } catch (...) {
-        dir = "/tmp/anime-gui/covers";
-        try { std::filesystem::create_directories(dir); } catch (...) {}
-    }
+    static const std::string dir = [] {
+        fs::path p = fs::path(paths::cache_dir()) / "covers";
+        std::error_code ec;
+        fs::create_directories(p, ec);
+        return p.string();
+    }();
     return dir;
 }
 
 std::string ImageCache::get_cached_path(const std::string& url) {
     if (url.empty()) return "";
-    std::string hash = simple_hash(url);
     std::string ext = ".jpg";
     if (url.find(".png") != std::string::npos) ext = ".png";
     else if (url.find(".webp") != std::string::npos) ext = ".webp";
-    return get_cache_dir() + "/" + hash + ext;
+    return (fs::path(get_cache_dir()) / (simple_hash(url) + ext)).string();
 }
 
 std::string ImageCache::ensure_image(const std::string& url) {
     if (url.empty()) return "";
-    std::string path = get_cached_path(url);
-    if (std::filesystem::exists(path) && std::filesystem::file_size(path) > 0) {
-        return path;
-    }
+    const std::string path = get_cached_path(url);
 
-    if (http::Client::download_file(url, path, 15)) {
-        return path;
-    }
-    return "";
-}
+    // The same poster is often requested by several views at once (grid card,
+    // details hero, backdrop). Let one thread download it while the rest wait.
+    static std::mutex mtx;
+    static std::condition_variable cv;
+    static std::set<std::string> in_flight;
 
-static void box_blur_horizontal(const unsigned char* in, unsigned char* out, int w, int h, int stride, int r) {
-    float inv = 1.0f / (2 * r + 1);
-    for (int y = 0; y < h; ++y) {
-        const unsigned char* row_in = in + y * stride;
-        unsigned char* row_out = out + y * stride;
-        for (int c = 0; c < 3; ++c) {
-            int sum = 0;
-            for (int i = -r; i <= r; ++i) {
-                int px = std::clamp(i, 0, w - 1);
-                sum += row_in[px * 4 + c];
-            }
-            row_out[0 * 4 + c] = static_cast<unsigned char>(sum * inv);
-            for (int x = 1; x < w; ++x) {
-                int add_px = std::clamp(x + r, 0, w - 1);
-                int sub_px = std::clamp(x - r - 1, 0, w - 1);
-                sum += row_in[add_px * 4 + c] - row_in[sub_px * 4 + c];
-                row_out[x * 4 + c] = static_cast<unsigned char>(sum * inv);
-            }
-        }
-        for (int x = 0; x < w; ++x) {
-            row_out[x * 4 + 3] = row_in[x * 4 + 3];
-        }
-    }
-}
+    std::unique_lock lock(mtx);
+    cv.wait(lock, [&] { return !in_flight.count(path); });
 
-static void box_blur_vertical(const unsigned char* in, unsigned char* out, int w, int h, int stride, int r) {
-    float inv = 1.0f / (2 * r + 1);
-    for (int x = 0; x < w; ++x) {
-        for (int c = 0; c < 3; ++c) {
-            int sum = 0;
-            for (int i = -r; i <= r; ++i) {
-                int py = std::clamp(i, 0, h - 1);
-                sum += in[py * stride + x * 4 + c];
-            }
-            out[0 * stride + x * 4 + c] = static_cast<unsigned char>(sum * inv);
-            for (int y = 1; y < h; ++y) {
-                int add_py = std::clamp(y + r, 0, h - 1);
-                int sub_py = std::clamp(y - r - 1, 0, h - 1);
-                sum += in[add_py * stride + x * 4 + c] - in[sub_py * stride + x * 4 + c];
-                out[y * stride + x * 4 + c] = static_cast<unsigned char>(sum * inv);
-            }
-        }
-        for (int y = 0; y < h; ++y) {
-            out[y * stride + x * 4 + 3] = in[y * stride + x * 4 + 3];
-        }
-    }
-}
+    std::error_code ec;
+    if (fs::exists(path, ec) && fs::file_size(path, ec) > 0) return path;
 
-std::string ImageCache::ensure_blurred_backdrop(const std::string& url) {
-    if (url.empty()) return "";
-    std::string orig_path = ensure_image(url);
-    if (orig_path.empty()) return "";
+    in_flight.insert(path);
+    lock.unlock();
 
-    std::string hash = simple_hash(url);
-    std::string blur_path = get_cache_dir() + "/" + hash + "_light_backdrop.png";
-    if (std::filesystem::exists(blur_path) && std::filesystem::file_size(blur_path) > 0) {
-        return blur_path;
-    }
+    const std::string tmp = path + ".part";
+    bool ok = http::Client::download_file(url, tmp, 15);
+    if (ok) fs::rename(tmp, path, ec);
+    if (!ok || ec) fs::remove(tmp, ec);
 
-    GError* err = nullptr;
-    GdkPixbuf* src = gdk_pixbuf_new_from_file(orig_path.c_str(), &err);
-    if (!src) {
-        if (err) g_error_free(err);
-        return "";
-    }
-
-    // High resolution for full-window backdrop coverage (960x640)
-    int target_w = 960;
-    int target_h = 640;
-    GdkPixbuf* scaled = gdk_pixbuf_scale_simple(src, target_w, target_h, GDK_INTERP_BILINEAR);
-    g_object_unref(src);
-    if (!scaled) return "";
-
-    // Ensure has alpha channel
-    GdkPixbuf* rgba = gdk_pixbuf_add_alpha(scaled, FALSE, 0, 0, 0);
-    g_object_unref(scaled);
-    if (!rgba) return "";
-
-    int stride = gdk_pixbuf_get_rowstride(rgba);
-    unsigned char* pixels = gdk_pixbuf_get_pixels(rgba);
-    std::vector<unsigned char> temp(stride * target_h);
-
-    // Light box blur (r=6): keeps artwork recognizable and vibrant while softly smoothing edges
-    int r = 6;
-    box_blur_horizontal(pixels, temp.data(), target_w, target_h, stride, r);
-    box_blur_vertical(temp.data(), pixels, target_w, target_h, stride, r);
-    box_blur_horizontal(pixels, temp.data(), target_w, target_h, stride, r);
-    box_blur_vertical(temp.data(), pixels, target_w, target_h, stride, r);
-
-    // Ensure full alpha coverage and subtle rich color balancing
-    for (int y = 0; y < target_h; ++y) {
-        unsigned char* row = pixels + y * stride;
-        for (int x = 0; x < target_w; ++x) {
-            row[x * 4 + 3] = 255;
-        }
-    }
-
-    err = nullptr;
-    gdk_pixbuf_save(rgba, blur_path.c_str(), "png", &err, NULL);
-    g_object_unref(rgba);
-    if (err) {
-        g_error_free(err);
-        return "";
-    }
-
-    return blur_path;
-}
-
-std::future<std::string> ImageCache::ensure_image_async(std::string url) {
-    return std::async(std::launch::async, [u = std::move(url)]() {
-        return ensure_image(u);
-    });
+    lock.lock();
+    in_flight.erase(path);
+    cv.notify_all();
+    return (ok && fs::exists(path, ec)) ? path : "";
 }
 
 } // namespace anime

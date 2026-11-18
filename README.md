@@ -1,113 +1,128 @@
-# Anime GUI 🌸 (C++20 & GTK4)
+# Andub
 
-Сучасний графічний застосунок (GUI) мовою **C++20** на базі фреймворку **GTK4** для пошуку, перегляду та завантаження аніме.
-Повна нативна заміна старої консольної версії: швидка, красива, з підтримкою багатьох провайдерів і низьким споживанням ресурсів.
-
----
-
-## Особливості 🌟
-- 🎨 **Сучасний інтерфейс GTK4:** красиві картки тайтлів із закругленими обкладинками високої якості, розмиттям фону при виборі тайтлу, значками рейтингів та плавними анімаціями.
-- 🚀 **Миттєвий асинхронний пошук:** живий пошук із затримкою вводу (debounce) без блокування інтерфейсу.
-- 🎭 **Пошук за жанрами:** вибір жанрів російською/українською з автоматичною фільтрацією.
-- 🎨 **Кольорові схеми (Теми):** Шляхетна темна (Midnight Purple), Смарагдова (Emerald Dark), Неонова кіберпанк (Cyberpunk Neon), Сонячний захід (Sunset Crimson) та Світла (Nordic Light).
-- 🔄 **Мультипровайдерність:**
-  - 🇺🇦 **AniTube (UA)** — найбільша база українського дубляжу з прямими потоками HLS (.m3u8 Ashdi).
-  - ⚡ **Shiza Project** — офіційний GraphQL API студії Shiza Project з повними метаданими та епізодами.
-  - 🎬 **AniBaza** — каталог та пошуковий API з інтеграцією Kodik.
-  - 🎙️ **AniDub** — офіційний каталог AniDub з прямими стрімами Sibnet (.mp4).
-  - 🌸 **АніЛібрія** — офіційний каталог AniLibria з високою якістю до 1080p.
-  - 🎞️ **AnimeVost** — величезний архів озвучок AnimeVost.
-- 🖼️ **Розумне кешування постерів:** автоматичне завантаження та кешування обкладинок у `~/.cache/anime-gui/covers/`.
-- 📺 **Стрімінг через mpv:** швидке відтворення HLS `.m3u8` та прямих потоків з розширеним буфером, автоматичним підхопленням якості та заголовків.
-- ✨ **Апскейлер у вбудованому плеєрі:** GPU-апскейл у реальному часі (FSR 1.0, FSRCNNX, Anime4K, Anime4K HQ) з mpv-upscaler. Перемикання кнопкою «Апскейл» або **Ctrl+U**; вибір запам'ятовується. Апскейл вмикається, коли вікно більше за відео (найкраще — у повноекранному режимі).
-- 💾 **Менеджер фонових завантажень:** завантаження серій через `yt-dlp` у фоні з діалогом прогресу та сповіщеннями робочого столу (`notify-send`).
-- ❤️ **Улюблені та історія:** збереження улюблених аніме та відмітки переглянутих серій (`✓`).
-- 📦 **Готові пакунки:** автономний **Linux AppImage** та портативний **Windows ZIP bundle**.
+Десктопний застосунок для пошуку, перегляду та завантаження аніме з українською та російською озвучкою.
+Ядро написане на **C++20**, інтерфейс на **Qt 6 Quick (QML)**, відео відтворюється через **libmpv**.
+Працює на Linux і Windows. macOS збирається тим самим CMake-проєктом, але поки не перевірявся.
 
 ---
 
-## Готові релізи (Завантажити) 📦
-- **Linux:** [dist/Anime-GUI-x86_64.AppImage](file:///home/ona/anime-tui/dist/Anime-GUI-x86_64.AppImage) (зробіть виконуваним `chmod +x` і запускайте).
-- **Windows:** [dist/Anime-GUI-Windows-x86_64.zip](file:///home/ona/anime-tui/dist/Anime-GUI-Windows-x86_64.zip) (розпакуйте та запустіть `anime-gui.exe`).
+## Можливості
+
+- **Каталог із постерами.** Адаптивна сітка, яка підлаштовується під ширину вікна, нескінченне прокручування сторінок і фонове підсвічування з обкладинки тайтлу під курсором.
+- **Пошук і жанри.** Пошук починається, щойно ви перестали друкувати. Є фільтр за жанром, а `жанр: драма` у рядку пошуку теж працює.
+- **8 джерел:** АніЛібрія, Dream Cast, Shiza Project, AniBaza, AniDub, AniTube (UA), AnimeVost, AniStar.
+- **Сторінка тайтлу:** опис, жанри, рейтинг, кнопка «Продовжити» з наступної непереглянутої серії та сітка серій з позначками переглянутого.
+- **Вбудований плеєр (libmpv):**
+  - шкала перемотки з буферизацією та підказкою часу;
+  - автоперехід на наступну серію та список серій;
+  - пропуск опенінгу, повний екран, керування з клавіатури (працює і в кириличній розкладці);
+  - кнопка «Відкрити в mpv».
+- **GPU-апскейл у реальному часі:** FSR 1.0, FSRCNNX, Anime4K, Anime4K HQ (`Ctrl+U` або меню в плеєрі).
+- **Завантаження** серій через `yt-dlp` у фоні, з прогресом, швидкістю та часом, що залишився.
+- **Улюблені та історія переглядів.** Дані старої GTK-версії підхоплюються автоматично.
+- **Оформлення:** темна, OLED або світла тема та 5 акцентних кольорів.
+
+## Клавіші плеєра
+
+| Клавіша | Дія |
+|---|---|
+| Пробіл | Пауза |
+| ← / → | Перемотка на 10 с |
+| ↑ / ↓ | Гучність |
+| M | Вимкнути звук |
+| S | Пропустити опенінг (+85 с) |
+| N / P | Наступна / попередня серія |
+| F, F11, подвійний клік | Повний екран |
+| Ctrl+U | Змінити апскейл |
+| Esc | Вийти з повного екрана / закрити плеєр |
 
 ---
 
-## Встановлення в систему 🛠️
+## Встановлення з вихідного коду (Linux)
 
-Для автоматичної збірки та встановлення в меню програм:
 ```bash
-./install.sh
+./install.sh      # встановлює залежності, збирає та ставить у ~/.local
+./uninstall.sh    # видалення (улюблені та історія залишаються)
 ```
 
-Для видалення:
+### Залежності
+
+Потрібні Qt **6.6 або новіший**, CMake, libmpv та libcurl. `mpv` і `yt-dlp` потрібні для зовнішнього плеєра та завантажень.
+
+**Fedora**
 ```bash
-./uninstall.sh
+sudo dnf install gcc-c++ cmake ninja-build qt6-qtbase-devel qt6-qtdeclarative-devel \
+    qt6-qtsvg qt6-qtimageformats mpv-devel libcurl-devel mpv yt-dlp
 ```
 
-### Встановлення залежностей вручну (для збірки з вихідного коду)
-
-#### Fedora
+**Arch Linux**
 ```bash
-sudo dnf install -y gcc-c++ meson ninja-build gtk4-devel libcurl-devel mpv-libs-devel yt-dlp
+sudo pacman -S base-devel cmake ninja qt6-base qt6-declarative qt6-svg qt6-imageformats mpv curl yt-dlp
 ```
 
-#### Ubuntu / Debian
+**Ubuntu 25.04+ / Debian 13+**
 ```bash
-sudo apt update
-sudo apt install -y g++ meson ninja-build libgtk-4-dev libcurl4-openssl-dev libmpv-dev yt-dlp
+sudo apt install build-essential cmake ninja-build qt6-base-dev qt6-declarative-dev \
+    qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates \
+    qml6-module-qtquick-layouts qml6-module-qtquick-effects qml6-module-qtquick-shapes \
+    qml6-module-qtqml-workerscript qt6-image-formats-plugins libqt6svg6 \
+    libmpv-dev libcurl4-openssl-dev mpv yt-dlp
+```
+Ubuntu 24.04 має Qt 6.4, цього замало. Там використовуйте AppImage.
+
+### Ручна збірка
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+./build/andub
 ```
 
-#### Arch Linux
-```bash
-sudo pacman -S gcc meson ninja gtk4 curl mpv yt-dlp
-```
+`-DANDUB_BUILD_TESTS=ON` додає тестові програми (`test_core`, `test_providers`, ...).
 
-> Збірка лінкується проти **системного** `libmpv` (через pkg-config), якщо він встановлений
-> (пакети `mpv-libs-devel` / `libmpv-dev` вище). Бандлований `lib/libmpv.so.2.5.0` у репозиторії
-> зібраний на Fedora з дуже новими залежностями (ffmpeg 62/60, libplacebo 360 тощо) і слугує
-> лише запасним варіантом — на інших дистрибутивах (напр. Ubuntu) він не лінкується через
-> невідповідність версій системних бібліотек.
+## Пакунки
+
+- **Linux AppImage:** `./scripts/build_appimage.sh` (використовує linuxdeploy і його Qt-плагін).
+- **Windows:** `./scripts/build_windows.sh` в оболонці MSYS2 MINGW64 (список пакетів pacman є на початку скрипта). На виході:
+  - `Andub-Setup-x86_64.exe`: інсталятор одним файлом (NSIS, `installer/andub.nsi`). Ставить у `%LOCALAPPDATA%\Programs\Andub` без прав адміністратора, з ярликами й деінсталятором;
+  - `Andub-Windows-x86_64.zip`: портативна версія.
+- **CI:** `.github/workflows/build-release.yml` збирає обидва варіанти та публікує реліз для тегів `v*`.
 
 ---
 
-## Ручна збірка ⚡
+## Структура проєкту
 
-```bash
-meson setup build --buildtype=release
-ninja -C build
-./build/anime-gui
 ```
-
-Для створення AppImage:
-```bash
-./scripts/build_appimage.sh
-```
-
-Для створення Windows збірки (потрібен MinGW-w64):
-```bash
-./scripts/build_windows.sh
-```
-
----
-
-## Структура проєкту 📁
-```
-anime-gui/
+andub/
+├── CMakeLists.txt
 ├── src/
-│   ├── main.cpp                  # Точка входу застосунку
-│   ├── application.hpp/.cpp      # Ініціалізація GtkApplication та CSS теми
-│   ├── models/                   # Моделі даних (Anime, Episode, Stream, Quality)
-│   ├── utils/                    # JSON парсер на C++20, HTTP клієнт
-│   ├── providers/                # Реалізація провайдерів (Shiza, AniBaza, AniDub, AniTube, AniLibria, AnimeVost)
-│   ├── services/                 # Кеш зображень, запуск mpv, історія, улюблені, завантаження, теми
-│   └── ui/                       # Віджети GTK4 (Картка аніме, сторінка деталей, діалог завантажень, головне вікно)
-├── resources/                    # CSS стилі, іконки
-├── desktop/                      # .desktop файл та системні іконки
-├── scripts/                      # Скрипти збірки AppImage та Windows
-└── dist/                         # Готові бінарні пакунки
+│   ├── main.cpp            # запуск Qt, OpenGL для сцени, шрифт, постер-провайдер
+│   ├── app/                # міст C++ ↔ QML: Catalog, Details, PlayerSession,
+│   │                       # Downloads, Settings, MpvPlayer (libmpv у Qt Quick), моделі списків
+│   ├── models/             # Anime, Episode, Stream
+│   ├── providers/          # джерела озвучки
+│   ├── services/           # кеш постерів, історія, улюблені, завантаження, апскейлер
+│   └── utils/              # HTTP (libcurl), JSON, Kodik, шляхи, рядки
+├── qml/
+│   ├── Main.qml            # вікно, навігація, плеєр поверх усього
+│   ├── Theme.qml           # дизайн-токени: кольори, радіуси, шрифти, анімації
+│   ├── components/         # кнопки, картки, сітка серій, шкала перемотки, тости...
+│   └── pages/              # Каталог, Тайтл, Плеєр, Завантаження, Налаштування
+├── resources/
+│   ├── fonts/              # Manrope (OFL)
+│   ├── icons/              # Phosphor Icons (MIT)
+│   └── shaders/            # шейдери апскейлу
+├── desktop/                # .desktop-файл
+└── scripts/                # AppImage, Windows, MSI
 ```
+
+Налаштування, улюблені та історія зберігаються в `~/.config/anime-gui/` (на Windows у `%LOCALAPPDATA%\anime-gui`), кеш постерів у `~/.cache/anime-gui/`.
 
 ---
 
 ## Ліцензія
-MIT. Шейдери в `resources/shaders/` мають власні ліцензії: FSR (MIT, AMD), Anime4K (MIT, див. `Anime4K_LICENSE`), FSRCNNX (LGPLv3), adaptive-sharpen (BSD-2-Clause).
+
+MIT. Сторонні ресурси мають власні ліцензії:
+- шрифт Manrope: SIL OFL 1.1 (`resources/fonts/OFL-manrope.txt`);
+- іконки Phosphor: MIT (`resources/icons/LICENSE-phosphor.txt`);
+- шейдери в `resources/shaders/`: FSR (MIT, AMD), Anime4K (MIT, див. `Anime4K_LICENSE`), FSRCNNX (LGPLv3), adaptive-sharpen (BSD-2-Clause).

@@ -1,84 +1,59 @@
 #!/usr/bin/env bash
-
 set -e
 
-echo -e "\033[1;36m==> Встановлення Anime GUI (C++ GTK4)...\033[0m"
+echo -e "\033[1;36m==> Встановлення Andub (Qt 6)...\033[0m"
 
-# 1. Перевірка компілятора та системних інструментів
-MISSING_DEPS=""
-if ! command -v g++ &> /dev/null && ! command -v clang++ &> /dev/null; then MISSING_DEPS="g++ $MISSING_DEPS"; fi
-if ! command -v meson &> /dev/null; then MISSING_DEPS="meson $MISSING_DEPS"; fi
-if ! command -v ninja &> /dev/null; then MISSING_DEPS="ninja $MISSING_DEPS"; fi
-if ! command -v pkg-config &> /dev/null; then MISSING_DEPS="pkg-config $MISSING_DEPS"; fi
-if ! pkg-config --exists gtk4; then MISSING_DEPS="gtk4-devel $MISSING_DEPS"; fi
-if ! pkg-config --exists libcurl; then MISSING_DEPS="libcurl-devel $MISSING_DEPS"; fi
-if ! pkg-config --exists mpv; then MISSING_DEPS="libmpv-dev $MISSING_DEPS"; fi
-
-if [ -n "$MISSING_DEPS" ]; then
-    echo -e "\033[1;33m[Попередження]\033[0m Відсутні необхідні пакунки: $MISSING_DEPS"
-    echo -e "Спроба автоматичного встановлення..."
-    if command -v pacman &> /dev/null; then
-        sudo pacman -S --needed --noconfirm base-devel meson ninja gtk4 curl mpv yt-dlp || true
-    elif command -v apt-get &> /dev/null; then
-        sudo apt-get update && sudo apt-get install -y build-essential meson ninja-build libgtk-4-dev libcurl4-openssl-dev libmpv-dev yt-dlp || true
-    elif command -v dnf &> /dev/null; then
-        sudo dnf install -y gcc-c++ meson ninja-build gtk4-devel libcurl-devel mpv-libs-devel yt-dlp || true
-    fi
-fi
-
-# 2. Збірка програми
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-echo -e "\033[1;34m==> Компіляція проекту...\033[0m"
-if [ ! -d "build" ]; then
-    meson setup build --buildtype=release
-fi
-ninja -C build
+have_qt() {
+    for d in /usr/lib64/cmake/Qt6Quick /usr/lib/cmake/Qt6Quick /usr/lib/x86_64-linux-gnu/cmake/Qt6Quick; do
+        [ -d "$d" ] && return 0
+    done
+    return 1
+}
 
-# 3. Встановлення бінарника
+# 1. Залежності
+if ! command -v cmake &>/dev/null || ! have_qt || ! pkg-config --exists mpv 2>/dev/null; then
+    echo -e "\033[1;33m==> Встановлення залежностей...\033[0m"
+    if command -v pacman &>/dev/null; then
+        sudo pacman -S --needed --noconfirm base-devel cmake ninja qt6-base qt6-declarative qt6-svg \
+            qt6-imageformats mpv curl yt-dlp
+    elif command -v dnf &>/dev/null; then
+        sudo dnf install -y gcc-c++ cmake ninja-build qt6-qtbase-devel qt6-qtdeclarative-devel \
+            qt6-qtsvg qt6-qtimageformats mpv-devel libcurl-devel mpv yt-dlp
+    elif command -v apt-get &>/dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake ninja-build qt6-base-dev qt6-declarative-dev \
+            qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates \
+            qml6-module-qtquick-layouts qml6-module-qtquick-effects qml6-module-qtquick-shapes \
+            qml6-module-qtqml-workerscript qt6-image-formats-plugins libqt6svg6 \
+            libmpv-dev libcurl4-openssl-dev mpv yt-dlp
+    else
+        echo "Невідомий пакетний менеджер. Встановіть вручну: CMake, Qt 6.6+ (Quick, QuickControls2), libmpv, libcurl."
+    fi
+fi
+
+# 2. Збірка та встановлення в ~/.local
+GENERATOR=()
+command -v ninja &>/dev/null && GENERATOR=(-G Ninja)
+cmake -S . -B build "${GENERATOR[@]}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local"
+cmake --build build --parallel
+cmake --install build
+
 PREFIX_BIN="$HOME/.local/bin"
-PREFIX_LIB="$HOME/.local/lib"
 PREFIX_DATA="$HOME/.local/share"
-mkdir -p "$PREFIX_BIN" "$PREFIX_LIB" "$PREFIX_DATA/applications" "$PREFIX_DATA/icons/hicolor/256x256/apps" "$PREFIX_DATA/andub"
-
-echo -e "\033[1;34m==> Встановлення файлів у $HOME/.local/...\033[0m"
-cp -f build/andub "$PREFIX_BIN/andub"
-chmod +x "$PREFIX_BIN/andub"
 ln -sf "$PREFIX_BIN/andub" "$PREFIX_BIN/anime-gui"
-ln -sf "$PREFIX_BIN/andub" "$PREFIX_BIN/anime-tui"
-# Only ship the bundled libmpv.so if there's no system one — copying it
-# unconditionally would shadow a correctly-linked system libmpv for anyone
-# with ~/.local/lib on their LD_LIBRARY_PATH, reintroducing the exact
-# "wrong libmpv ABI" crash this script is supposed to avoid.
-if ! pkg-config --exists mpv; then
-    cp -d lib/libmpv.so* "$PREFIX_LIB/" 2>/dev/null || true
-else
-    rm -f "$PREFIX_LIB"/libmpv.so*
-fi
 
-# Копіювання ресурсів
-cp -f resources/style.css "$PREFIX_DATA/andub/style.css"
-rm -rf "$PREFIX_DATA/andub/shaders"
-cp -r resources/shaders "$PREFIX_DATA/andub/shaders"
-if [ -f "resources/anime-gui.png" ]; then
-    cp -f resources/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/andub.png"
-elif [ -f "desktop/anime-gui.png" ]; then
-    cp -f desktop/anime-gui.png "$PREFIX_DATA/icons/hicolor/256x256/apps/andub.png"
-fi
+# Old GTK installs shipped a stylesheet that is no longer used
+rm -f "$PREFIX_DATA/andub/style.css"
 
-# Встановлення .desktop ярлика
-if [ -f "desktop/andub.desktop" ]; then
-    sed -e "s|Exec=andub|Exec=$PREFIX_BIN/andub|g" desktop/andub.desktop > "$PREFIX_DATA/applications/andub.desktop"
-    chmod +x "$PREFIX_DATA/applications/andub.desktop"
-elif [ -f "desktop/anime-gui.desktop" ]; then
-    sed -e "s|Exec=anime-gui|Exec=$PREFIX_BIN/andub|g" desktop/anime-gui.desktop > "$PREFIX_DATA/applications/andub.desktop"
-    chmod +x "$PREFIX_DATA/applications/andub.desktop"
+if [ -f "$PREFIX_DATA/applications/andub.desktop" ]; then
+    sed -i "s|^Exec=andub|Exec=$PREFIX_BIN/andub|" "$PREFIX_DATA/applications/andub.desktop"
 fi
+# Refresh launcher caches (rofi reads .desktop files directly; KDE keeps its own index)
+command -v update-desktop-database &>/dev/null && update-desktop-database "$PREFIX_DATA/applications" || true
+command -v gtk-update-icon-cache &>/dev/null && gtk-update-icon-cache -q -t "$PREFIX_DATA/icons/hicolor" || true
+command -v kbuildsycoca6 &>/dev/null && kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
 
-if command -v update-desktop-database &> /dev/null; then
-    update-desktop-database "$PREFIX_DATA/applications" || true
-fi
-
-echo -e "\033[1;32m[Готово!]\033[0m Andub успішно встановлено!"
-echo -e "Додаток доступний у меню програм або через термінал командою: \033[1;36mandub\033[0m (або \033[1;36manime-gui\033[0m / \033[1;36manime-tui\033[0m)"
+echo -e "\033[1;32m[Готово!]\033[0m Andub встановлено. Запуск: \033[1;36mandub\033[0m або з меню програм."

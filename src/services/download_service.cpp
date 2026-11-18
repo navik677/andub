@@ -1,34 +1,29 @@
 #include "download_service.hpp"
-#include <iostream>
-#include <thread>
 #include <filesystem>
-#include <cstdlib>
-#include <array>
+#include <functional>
+#include <thread>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QString>
+#include <QStringList>
+#include <QRegularExpression>
 
 namespace anime {
 
-static void send_notification(const std::string& title, const std::string& msg) {
-    std::string safe_title = title;
-    std::string safe_msg = msg;
-    for (char& c : safe_title) { if (c == '"' || c == '$' || c == '`' || c == '\\') c = '\''; }
-    for (char& c : safe_msg) { if (c == '"' || c == '$' || c == '`' || c == '\\') c = '\''; }
-    std::string cmd = "notify-send -a \"Anime GUI\" \"" + safe_title + "\" \"" + safe_msg + "\" 2>/dev/null";
-    std::system(cmd.c_str());
-}
+namespace fs = std::filesystem;
 
 static std::string sanitize_filename(const std::string& name) {
     std::string res;
-    for (size_t i = 0; i < name.size(); ++i) {
-        unsigned char c = static_cast<unsigned char>(name[i]);
-        // Disallow filesystem delimiters, quotes, control chars, and shell expansion chars
-        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || 
-            c == '<' || c == '>' || c == '|' || c == '`' || c == '$' || c == '\'' || c < 32) {
+    for (char ch : name) {
+        unsigned char c = static_cast<unsigned char>(ch);
+        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' ||
+            c == '<' || c == '>' || c == '|' || c < 32) {
             res += '_';
         } else {
-            res += name[i];
+            res += ch;
         }
     }
-    while (!res.empty() && (res.back() == ' ' || res.back() == '_')) res.pop_back();
+    while (!res.empty() && (res.back() == ' ' || res.back() == '_' || res.back() == '.')) res.pop_back();
     if (res.empty()) res = "anime";
     return res;
 }
@@ -38,7 +33,29 @@ DownloadService& DownloadService::instance() {
     return s;
 }
 
-void DownloadService::start_download(const Anime& anime, const Episode& episode, const std::string& quality, const std::string& stream_url, const std::map<std::string, std::string>& headers) {
+std::string DownloadService::download_root() {
+    QString base = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    if (base.isEmpty()) base = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+    fs::path root = fs::path(base.toStdString()) / "Anime";
+    std::error_code ec;
+    fs::create_directories(root, ec);
+    if (ec) root = fs::temp_directory_path(ec) / "AnimeDownloads";
+    fs::create_directories(root, ec);
+    return root.string();
+}
+
+void DownloadService::update(int id, const std::function<void(DownloadJob&)>& fn) {
+    std::lock_guard lock(mutex_);
+    for (auto& j : jobs_) {
+        if (j.id == id) {
+            fn(j);
+            return;
+        }
+    }
+}
+
+void DownloadService::start_download(const Anime& anime, const Episode& episode, const std::string& quality,
+                                     const std::string& stream_url, const std::map<std::string, std::string>& headers) {
     DownloadJob job;
     job.anime_title = anime.title_ru.empty() ? "Аніме" : anime.title_ru;
     job.episode_title = episode.display_title();
@@ -46,143 +63,89 @@ void DownloadService::start_download(const Anime& anime, const Episode& episode,
     job.url = stream_url;
     job.is_active = true;
 
-    size_t job_idx = 0;
+    fs::path dir = fs::path(download_root()) / sanitize_filename(job.anime_title);
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    if (ec) dir = download_root();
+    job.output_path = (dir / (sanitize_filename(job.episode_title) + ".mp4")).string();
+
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard lock(mutex_);
+        job.id = next_id_++;
         jobs_.push_back(job);
-        job_idx = jobs_.size() - 1;
     }
 
-    send_notification("Початок завантаження", job.anime_title + " — " + job.episode_title);
-
-    std::thread([this, job_idx, job, headers]() {
-        try {
-            std::error_code ec;
-            const char* home = std::getenv("HOME");
-            std::string dl_base;
-
-            // Attempt 1: ~/Downloads/Anime
-            if (home) {
-                std::string test_dir = std::string(home) + "/Downloads/Anime";
-                std::filesystem::create_directories(test_dir, ec);
-                if (!ec && std::filesystem::exists(test_dir)) {
-                    dl_base = test_dir;
-                }
-            }
-
-            // Attempt 2: ./downloads in current working directory
-            if (dl_base.empty()) {
-                ec.clear();
-                std::string test_dir = "./downloads";
-                std::filesystem::create_directories(test_dir, ec);
-                if (!ec && std::filesystem::exists(test_dir)) {
-                    dl_base = test_dir;
-                }
-            }
-
-            // Attempt 3: /tmp/AnimeDownloads
-            if (dl_base.empty()) {
-                ec.clear();
-                std::string test_dir = "/tmp/AnimeDownloads";
-                std::filesystem::create_directories(test_dir, ec);
-                if (!ec && std::filesystem::exists(test_dir)) {
-                    dl_base = test_dir;
-                } else {
-                    dl_base = "/tmp";
-                }
-            }
-
-            std::string safe_dir = dl_base + "/" + sanitize_filename(job.anime_title);
-            ec.clear();
-            std::filesystem::create_directories(safe_dir, ec);
-            if (ec || !std::filesystem::exists(safe_dir)) {
-                safe_dir = dl_base;
-            }
-
-            std::string out_path = safe_dir + "/" + sanitize_filename(job.episode_title) + ".mp4";
-
-            std::string safe_url = job.url;
-            for (char& c : safe_url) { if (c == '"' || c == '$' || c == '`') c = '_'; }
-
-            std::string cmd = "yt-dlp --newline";
-            if (headers.count("Referer")) {
-                cmd += " --referer \"" + headers.at("Referer") + "\"";
-            }
-            for (const auto& [k, v] : headers) {
-                if (k != "Referer") {
-                    cmd += " --add-header \"" + k + ": " + v + "\"";
-                }
-            }
-            cmd += " -o \"" + out_path + "\" \"" + safe_url + "\" 2>&1";
-            FILE* pipe = popen(cmd.c_str(), "r");
-            if (!pipe) {
-                std::lock_guard<std::mutex> lock(mutex_);
-                if (job_idx < jobs_.size()) {
-                    jobs_[job_idx].is_active = false;
-                    jobs_[job_idx].has_error = true;
-                }
-                send_notification("Помилка завантаження", job.anime_title + " — " + job.episode_title);
-                return;
-            }
-
-            std::array<char, 512> buf;
-            while (fgets(buf.data(), buf.size(), pipe) != nullptr) {
-                std::string line = buf.data();
-                if (line.find("[download]") != std::string::npos && line.find('%') != std::string::npos) {
-                    // Parse percentage
-                    size_t p_pos = line.find('%');
-                    size_t sp = line.rfind(' ', p_pos);
-                    if (sp != std::string::npos) {
-                        std::string pct = line.substr(sp + 1, p_pos - sp);
-                        std::lock_guard<std::mutex> lock(mutex_);
-                        if (job_idx < jobs_.size()) {
-                            jobs_[job_idx].progress_percent = pct;
-                        }
-                    }
-                }
-            }
-
-            int ret = pclose(pipe);
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                if (job_idx < jobs_.size()) {
-                    jobs_[job_idx].is_active = false;
-                    if (ret == 0) {
-                        jobs_[job_idx].is_done = true;
-                        jobs_[job_idx].progress_percent = "100%";
-                    } else {
-                        jobs_[job_idx].has_error = true;
-                    }
-                }
-            }
-
-            if (ret == 0) {
-                send_notification("Завершено", job.anime_title + " — " + job.episode_title);
+    std::thread([this, job, headers]() {
+        QStringList args{"--newline", "--no-part", "-o", QString::fromStdString(job.output_path)};
+        for (const auto& [k, v] : headers) {
+            if (k == "Referer" || k == "referer") {
+                args << "--referer" << QString::fromStdString(v);
             } else {
-                send_notification("Помилка", "Не вдалося завантажити " + job.episode_title);
-            }
-        } catch (const std::exception& ex) {
-            std::cerr << "[DownloadService] Exception: " << ex.what() << "\n";
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (job_idx < jobs_.size()) {
-                jobs_[job_idx].is_active = false;
-                jobs_[job_idx].has_error = true;
-            }
-            send_notification("Помилка", "Виняток при завантаженні: " + job.episode_title);
-        } catch (...) {
-            std::cerr << "[DownloadService] Unknown exception caught\n";
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (job_idx < jobs_.size()) {
-                jobs_[job_idx].is_active = false;
-                jobs_[job_idx].has_error = true;
+                args << "--add-header" << QString::fromStdString(k + ": " + v);
             }
         }
+        args << QString::fromStdString(job.url);
+
+        QProcess proc;
+        proc.setProcessChannelMode(QProcess::MergedChannels);
+        proc.start(QStringLiteral("yt-dlp"), args);
+        if (!proc.waitForStarted(10000)) {
+            update(job.id, [](DownloadJob& j) {
+                j.is_active = false;
+                j.has_error = true;
+                j.error = "yt-dlp не знайдено";
+            });
+            return;
+        }
+
+        // "[download]  42.3% of ~120.00MiB at  2.10MiB/s ETA 00:41"
+        static const QRegularExpression re(
+            R"(\[download\]\s+([\d.]+)%.*?(?:at\s+(\S+))?.*?(?:ETA\s+(\S+))?\s*$)");
+        QByteArray buffer;
+        while (proc.state() != QProcess::NotRunning) {
+            proc.waitForReadyRead(500);
+            buffer += proc.readAll();
+            int nl;
+            while ((nl = buffer.indexOf('\n')) >= 0) {
+                QString line = QString::fromUtf8(buffer.left(nl)).trimmed();
+                buffer.remove(0, nl + 1);
+                auto m = re.match(line);
+                if (!m.hasMatch()) continue;
+                double pct = m.captured(1).toDouble() / 100.0;
+                std::string speed = m.captured(2).toStdString();
+                std::string eta = m.captured(3).toStdString();
+                update(job.id, [&](DownloadJob& j) {
+                    j.progress = pct;
+                    if (!speed.empty() && speed != "Unknown") j.speed = speed;
+                    if (!eta.empty() && eta != "Unknown") j.eta = eta;
+                });
+            }
+        }
+        proc.waitForFinished(-1);
+        const bool ok = proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0;
+        update(job.id, [ok](DownloadJob& j) {
+            j.is_active = false;
+            j.speed.clear();
+            j.eta.clear();
+            if (ok) {
+                j.is_done = true;
+                j.progress = 1.0;
+            } else {
+                j.has_error = true;
+                j.error = "Не вдалося завантажити";
+            }
+        });
     }).detach();
 }
 
 std::vector<DownloadJob> DownloadService::get_jobs() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard lock(mutex_);
     return jobs_;
+}
+
+void DownloadService::clear_finished() {
+    std::lock_guard lock(mutex_);
+    std::erase_if(jobs_, [](const DownloadJob& j) { return !j.is_active; });
 }
 
 } // namespace anime

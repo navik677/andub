@@ -1,40 +1,23 @@
 #include "player_service.hpp"
 #include "../utils/json.hpp"
+#include "../utils/paths.hpp"
 #include "../utils/str_utils.hpp"
 #include <iostream>
-#include <vector>
-#include <thread>
 #include <fstream>
 #include <filesystem>
-#include <cstdlib>
-#include <glib.h>
-
-#ifndef _WIN32
-#include <unistd.h>
-#include <sys/wait.h>
-#endif
+#include <mutex>
+#include <QProcess>
+#include <QStringList>
 
 namespace anime {
 
 static PlayerMode s_player_mode = PlayerMode::Embedded;
 static bool s_mode_loaded = false;
+// settings.json is read-modify-written from the UI and from background threads
+static std::mutex s_settings_mutex;
 
 std::string PlayerService::get_config_path() {
-    const char* xdg = std::getenv("XDG_CONFIG_HOME");
-    const char* home = std::getenv("HOME");
-    std::string base;
-    if (xdg && *xdg) base = xdg;
-    else if (home && *home) base = std::string(home) + "/.config";
-    else base = "/tmp";
-
-    std::string dir = base + "/anime-gui";
-    try {
-        std::filesystem::create_directories(dir);
-    } catch (...) {
-        dir = "/tmp/anime-gui";
-        try { std::filesystem::create_directories(dir); } catch (...) {}
-    }
-    return dir + "/settings.json";
+    return paths::config_file("settings.json");
 }
 
 PlayerMode PlayerService::get_player_mode() {
@@ -67,6 +50,7 @@ void PlayerService::set_player_mode(PlayerMode mode) {
 }
 
 std::string PlayerService::get_setting(const std::string& key, const std::string& fallback) {
+    std::lock_guard lock(s_settings_mutex);
     try {
         std::string cfg_path = get_config_path();
         if (!std::filesystem::exists(cfg_path)) return fallback;
@@ -82,6 +66,7 @@ std::string PlayerService::get_setting(const std::string& key, const std::string
 }
 
 void PlayerService::set_setting(const std::string& key, const std::string& value) {
+    std::lock_guard lock(s_settings_mutex);
     try {
         std::string cfg_path = get_config_path();
         json::Value root;
@@ -104,108 +89,68 @@ bool PlayerService::play(const Quality& quality, const std::string& anime_title,
 bool PlayerService::play_external(const Quality& quality, const std::string& anime_title, const Episode* episode, double start_pos) {
     if (quality.url.empty()) return false;
 
-    std::thread([quality, anime_title, ep_copy = (episode ? *episode : Episode()), start_pos]() {
-        std::vector<std::string> args = {"mpv"};
+    QStringList args;
+    std::string win_title = anime_title;
+    if (episode && !episode->number.empty()) {
+        win_title += " - Серія " + episode->number;
+    }
+    args << QString::fromStdString("--title=" + win_title)
+         << QString::fromStdString("--force-media-title=" + win_title)
+         << "--msg-level=all=warn"
+         << "--hwdec=auto-safe"
+         << "--force-window=yes"
+         << "--keep-open=yes";
 
-        std::string win_title = anime_title;
-        if (!ep_copy.number.empty()) {
-            win_title += " — Серія " + ep_copy.number;
+    if (start_pos > 1.0) {
+        args << QString("--start=%1").arg(static_cast<int>(start_pos));
+    }
+
+    // Anime-friendly key bindings (s skips the opening, like in the embedded player)
+    try {
+        std::string input_conf = paths::config_file("mpv_input.conf");
+        std::ofstream f(input_conf);
+        f << "# Anime shortcuts\n"
+          << "s show-text \"Пропуск опенінгу (+85с)\" ; seek 85\n"
+          << "S show-text \"Повернення (-85с)\" ; seek -85 ; set vid no ; set vid auto\n"
+          << "RIGHT seek 10\n"
+          << "LEFT seek -10 ; set vid no ; set vid auto\n"
+          << "UP add volume 5\n"
+          << "DOWN add volume -5\n"
+          << "SPACE cycle pause\n"
+          << "f cycle fullscreen\n";
+        args << QString::fromStdString("--input-conf=" + input_conf);
+    } catch (...) {}
+
+    std::string stream_url = quality.url;
+    auto hls_pos = stream_url.find(":hls:manifest.m3u8");
+    if (hls_pos != std::string::npos) {
+        stream_url = stream_url.substr(0, hls_pos);
+    }
+
+    args << "--ytdl=no" << "--load-scripts=no" << "--cache=yes"
+         << "--demuxer-max-bytes=128MiB" << "--demuxer-readahead-secs=60";
+
+    std::string headers_str;
+    for (const auto& [k, v] : quality.headers) {
+        std::string lower_k = utils::utf8_tolower(k);
+        if (lower_k == "user-agent") {
+            args << QString::fromStdString("--user-agent=" + v);
+        } else if (lower_k == "referer") {
+            args << QString::fromStdString("--referrer=" + v);
+        } else {
+            if (!headers_str.empty()) headers_str += ",";
+            headers_str += k + ": " + v;
         }
-        args.push_back("--title=" + win_title);
-        args.push_back("--force-media-title=" + win_title);
-        args.push_back("--msg-level=all=warn,statusline=status");
-        args.push_back("--hwdec=auto-safe");
-        args.push_back("--force-window=yes");
-        args.push_back("--keep-open=yes");
+    }
+    if (!headers_str.empty()) {
+        args << QString::fromStdString("--http-header-fields=" + headers_str);
+    }
+    args << QString::fromStdString(stream_url);
 
-        if (start_pos > 1.0) {
-            args.push_back("--start=" + std::to_string(static_cast<int>(start_pos)));
-        }
-
-        // Ensure anime input config with opening skip (+85s on 's')
-        const char* xdg = std::getenv("XDG_CONFIG_HOME");
-        const char* home = std::getenv("HOME");
-        std::string conf_dir;
-        if (xdg && *xdg) conf_dir = std::string(xdg) + "/anime-gui";
-        else if (home && *home) conf_dir = std::string(home) + "/.config/anime-gui";
-        else conf_dir = "/tmp/anime-gui";
-
-        try {
-            std::filesystem::create_directories(conf_dir);
-            std::string input_conf = conf_dir + "/mpv_input.conf";
-            std::ofstream f(input_conf);
-            f << "# Anime shortcuts\n"
-              << "s show-text \"Пропуск опенінгу (+85с)\" ; seek 85\n"
-              << "S show-text \"Повернення (-85с)\" ; seek -85 ; set vid no ; set vid auto\n"
-              << "RIGHT seek 10\n"
-              << "LEFT seek -10 ; set vid no ; set vid auto\n"
-              << "UP add volume 5\n"
-              << "DOWN add volume -5\n"
-              << "SPACE cycle pause\n"
-              << "f cycle fullscreen\n";
-            args.push_back("--input-conf=" + input_conf);
-        } catch (...) {}
-
-        std::string stream_url = quality.url;
-        auto hls_pos = stream_url.find(":hls:manifest.m3u8");
-        if (hls_pos != std::string::npos) {
-            stream_url = stream_url.substr(0, hls_pos);
-        }
-
-        args.push_back("--ytdl=no");
-        args.push_back("--load-scripts=no");
-        args.push_back("--cache=yes");
-        args.push_back("--demuxer-max-bytes=128MiB");
-        args.push_back("--demuxer-readahead-secs=60");
-
-        std::string headers_str;
-        std::string user_agent;
-        std::string referrer_val;
-        for (const auto& [k, v] : quality.headers) {
-            std::string lower_k = utils::utf8_tolower(k);
-            if (lower_k == "user-agent") {
-                user_agent = v;
-            } else if (lower_k == "referer") {
-                referrer_val = v;
-                args.push_back("--referrer=" + v);
-            } else {
-                if (!headers_str.empty()) headers_str += ",";
-                headers_str += k + ": " + v;
-            }
-        }
-        if (!user_agent.empty()) {
-            args.push_back("--user-agent=" + user_agent);
-        }
-        if (!headers_str.empty()) {
-            args.push_back("--http-header-fields=" + headers_str);
-        }
-
-        args.push_back(stream_url);
-
-        std::vector<char*> c_args;
-        for (auto& s : args) c_args.push_back(s.data());
-        c_args.push_back(nullptr);
-
-#ifdef _WIN32
-        GError* gerr = nullptr;
-        g_spawn_async(nullptr, c_args.data(), nullptr, G_SPAWN_SEARCH_PATH, nullptr, nullptr, nullptr, &gerr);
-        if (gerr) {
-            std::cerr << "[PlayerService] g_spawn_async error: " << gerr->message << "\n";
-            g_error_free(gerr);
-        }
-#else
-        pid_t pid = fork();
-        if (pid == 0) {
-            execvp("mpv", c_args.data());
-            _exit(127);
-        } else if (pid > 0) {
-            int status = 0;
-            waitpid(pid, &status, 0);
-        }
-#endif
-    }).detach();
-
-    return true;
+    // Arguments go straight to the process (no shell), so URLs and titles need no escaping.
+    bool ok = QProcess::startDetached(QStringLiteral("mpv"), args);
+    if (!ok) std::cerr << "[PlayerService] failed to start mpv\n";
+    return ok;
 }
 
 } // namespace anime

@@ -1,12 +1,14 @@
 [Desktop Entry]
+Type=Application
 Name=Andub
-Name[uk]=Andub
-Comment=Modern anime streaming desktop player
-Comment[uk]=Сучасний додаток для перегляду аніме
+GenericName=Anime Player
+GenericName[uk]=Перегляд аніме
+Comment=Watch and download anime with Ukrainian and Russian dubs
+Comment[uk]=Перегляд і завантаження аніме з озвучкою
 Exec=andub
 Icon=andub
 Terminal=false
-Type=Application
-Categories=AudioVideo;Video;Player;
-Keywords=anime;player;streaming;andub;
+Categories=AudioVideo;Video;Player;Qt;
+Keywords=anime;player;streaming;dub;andub;аніме;озвучка;
 StartupNotify=true
+StartupWMClass=andub

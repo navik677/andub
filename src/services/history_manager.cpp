@@ -1,5 +1,6 @@
 #include "history_manager.hpp"
 #include "../utils/json.hpp"
+#include "../utils/paths.hpp"
 #include <fstream>
 #include <filesystem>
 #include <cstdlib>
@@ -7,21 +8,7 @@
 namespace anime {
 
 std::string HistoryManager::get_history_file() {
-    const char* xdg = std::getenv("XDG_CONFIG_HOME");
-    const char* home = std::getenv("HOME");
-    std::string base;
-    if (xdg && *xdg) base = xdg;
-    else if (home && *home) base = std::string(home) + "/.config";
-    else base = "/tmp";
-
-    std::string dir = base + "/anime-gui";
-    try {
-        std::filesystem::create_directories(dir);
-    } catch (...) {
-        dir = "/tmp/anime-gui";
-        try { std::filesystem::create_directories(dir); } catch (...) {}
-    }
-    return dir + "/history.json";
+    return paths::config_file("history.json");
 }
 
 void HistoryManager::mark_watched(const std::string& provider, const std::string& anime_id, const std::string& episode_num) {

@@ -4,9 +4,8 @@
 #include <iostream>
 #include <cstdlib>
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
+#include <QCoreApplication>
+#include <QString>
 
 #include <mpv/client.h>
 
@@ -48,16 +47,8 @@ size_t Upscaler::index_of(const std::string& id) {
 }
 
 static fs::path executable_dir() {
-#ifdef _WIN32
-    wchar_t buf[MAX_PATH];
-    DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
-    if (n > 0 && n < MAX_PATH) return fs::path(buf).parent_path();
-#else
-    std::error_code ec;
-    auto p = fs::read_symlink("/proc/self/exe", ec);
-    if (!ec) return p.parent_path();
-#endif
-    return {};
+    const QString dir = QCoreApplication::applicationDirPath();
+    return dir.isEmpty() ? fs::path() : fs::path(dir.toStdString());
 }
 
 const std::string& Upscaler::shader_dir() {
@@ -67,8 +58,9 @@ const std::string& Upscaler::shader_dir() {
 
         fs::path exe = executable_dir();
         if (!exe.empty()) {
-            candidates.push_back(exe / ".." / "share" / "andub" / "shaders"); // meson install, AppImage
+            candidates.push_back(exe / ".." / "share" / "andub" / "shaders"); // CMake install, AppImage
             candidates.push_back(exe / "resources" / "shaders");              // Windows bundle
+            candidates.push_back(exe / ".." / "Resources" / "shaders");       // macOS .app bundle
         }
 
         const char* xdg = std::getenv("XDG_DATA_HOME");
