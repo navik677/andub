@@ -163,13 +163,13 @@ Item {
     GridView {
         id: grid
         anchors.top: header.bottom
-        anchors.topMargin: 18
+        anchors.topMargin: 6
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         leftMargin: page.side
         rightMargin: page.side - gap
-        topMargin: 6
+        topMargin: 18  // room for the hover ring and lift of the first row (the view clips)
         bottomMargin: 32
         clip: true
         boundsBehavior: Flickable.StopAtBounds
