@@ -83,7 +83,7 @@ cmake --build build
 ## Пакунки
 
 - **Linux AppImage:** `./scripts/build_appimage.sh` (використовує linuxdeploy і його Qt-плагін).
-- **Windows:** `./scripts/build_windows.sh` в оболонці MSYS2 MINGW64 (список пакетів pacman є на початку скрипта). На виході:
+- **Windows:** `./scripts/build_windows.sh` в оболонці MSYS2 UCRT64 (список пакетів pacman є на початку скрипта). На виході:
   - `Andub-Setup-x86_64.exe`: інсталятор одним файлом (NSIS, `installer/andub.nsi`). Ставить у `%LOCALAPPDATA%\Programs\Andub` без прав адміністратора, з ярликами й деінсталятором;
   - `Andub-Windows-x86_64.zip`: портативна версія.
 - **CI:** `.github/workflows/build-release.yml` збирає обидва варіанти та публікує реліз для тегів `v*`.

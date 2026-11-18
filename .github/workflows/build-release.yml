@@ -47,21 +47,21 @@ jobs:
 
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
-          install: >-
-            zip
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-nsis
-            mingw-w64-x86_64-qt6-base
-            mingw-w64-x86_64-qt6-declarative
-            mingw-w64-x86_64-qt6-svg
-            mingw-w64-x86_64-qt6-imageformats
-            mingw-w64-x86_64-mpv
-            mingw-w64-x86_64-curl
+          install: zip
+          pacboy: >-
+            gcc:p
+            cmake:p
+            ninja:p
+            pkgconf:p
+            qt6-base:p
+            qt6-declarative:p
+            qt6-svg:p
+            qt6-imageformats:p
+            mpv:p
+            curl:p
+            nsis:p
 
       - name: Build app and installer
         run: ./scripts/build_windows.sh

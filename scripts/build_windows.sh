@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Windows build + installer. Run in an MSYS2 MINGW64 shell (CI does the same):
-#   pacman -S --needed zip mingw-w64-x86_64-{gcc,cmake,ninja,pkgconf,qt6-base,qt6-declarative,qt6-svg,qt6-imageformats,mpv,curl,nsis}
+# Windows build + installer. Run in an MSYS2 UCRT64 shell (CI does the same; mpv
+# is no longer packaged for the old MINGW64 environment):
+#   pacman -S --needed zip mingw-w64-ucrt-x86_64-{gcc,cmake,ninja,pkgconf,qt6-base,qt6-declarative,qt6-svg,qt6-imageformats,mpv,curl,nsis}
 # Output:
 #   dist/Andub-Setup-x86_64.exe     one-file installer
 #   dist/Andub-Windows-x86_64.zip   portable folder
@@ -24,7 +25,8 @@ cp -r resources/shaders "$BUNDLE/resources/"
 
 echo "==> windeployqt"
 WINDEPLOYQT=""
-for c in windeployqt6 windeployqt-qt6 windeployqt /mingw64/share/qt6/bin/windeployqt.exe; do
+PREFIX="${MINGW_PREFIX:-/ucrt64}"
+for c in windeployqt6 windeployqt-qt6 windeployqt "$PREFIX/share/qt6/bin/windeployqt.exe"; do
     if command -v "$c" &>/dev/null; then WINDEPLOYQT="$c"; break; fi
 done
 [ -n "$WINDEPLOYQT" ] || { echo "windeployqt not found"; exit 1; }
@@ -33,7 +35,7 @@ done
 # External mpv window ("Відкрити в mpv"); found next to andub.exe at runtime
 if command -v mpv &>/dev/null; then cp "$(command -v mpv)" "$BUNDLE/"; fi
 
-echo "==> Collecting MinGW runtime DLLs"
+echo "==> Collecting runtime DLLs from $PREFIX"
 # Repeat until no new DLLs appear: plugins (webp, svg, QML) pull in their own deps
 while true; do
     added=0
@@ -41,7 +43,7 @@ while true; do
         name="$(basename "$dll")"
         if [ ! -f "$BUNDLE/$name" ]; then cp "$dll" "$BUNDLE/"; added=1; fi
     done < <(find "$BUNDLE" -type f \( -iname '*.dll' -o -iname '*.exe' \) -print0 \
-             | xargs -0 ldd 2>/dev/null | awk '$3 ~ /^\/mingw64\// {print $3}' | sort -u)
+             | xargs -0 ldd 2>/dev/null | awk -v p="$PREFIX/" 'index($3, p) == 1 {print $3}' | sort -u)
     [ "$added" -eq 0 ] && break
 done
 
