@@ -86,28 +86,48 @@ Item {
             }
 
             AppButton {
-                id: genreButton
-                readonly property string label: {
-                    for (const g of Catalog.genres) if (g.value === Catalog.selectedGenres[0]) return g.label
-                    return ""
+                id: sortButton
+                readonly property var options: {
+                    const sp = Catalog.support
+                    return [
+                        { label: "Як на сайті", value: 0, ok: true },
+                        { label: "Нещодавно оновлені", value: 1, ok: sp.sortUpdated > 0 },
+                        { label: "За рейтингом", value: 2, ok: sp.sortRating > 0 },
+                        { label: "Спершу новіші", value: 3, ok: sp.sortYear > 0 },
+                        { label: "Спершу старіші", value: 4, ok: sp.sortYear > 0 },
+                        { label: "За назвою", value: 5, ok: sp.sortTitle > 0 },
+                    ].filter(o => o.ok)
                 }
-                kind: Catalog.selectedGenres.length ? "primary" : "secondary"
-                iconName: "funnel"
-                text: page.narrow ? "" : (label || "Жанр")
-                tip: page.narrow ? (label || "Жанр") : ""
+                readonly property string label: {
+                    for (const o of options) if (o.value === Catalog.sort) return o.label
+                    return "Як на сайті"
+                }
+                kind: "secondary"
+                iconName: "arrows-down-up"
+                text: page.narrow ? "" : label
+                tip: page.narrow ? "Сортування: " + label : "Сортування"
                 implicitHeight: 42
-                onClicked: genreMenu.open()
+                onClicked: sortMenu.open()
 
                 MenuSheet {
-                    id: genreMenu
+                    id: sortMenu
                     y: parent.height + 6
                     x: parent.width - width
-                    title: "Жанр"
-                    value: Catalog.selectedGenres.length ? Catalog.selectedGenres[0] : ""
-                    model: [{ label: "Усі жанри", value: "" }].concat(
-                        Catalog.genres)
-                    onPicked: v => Catalog.selectedGenres = v ? [v] : []
+                    title: "Сортування"
+                    value: Catalog.sort
+                    model: sortButton.options
+                    onPicked: v => Catalog.sort = v
                 }
+            }
+
+            AppButton {
+                id: filterButton
+                kind: Catalog.activeFilterCount > 0 ? "primary" : "secondary"
+                iconName: "funnel"
+                text: page.narrow ? "" : (Catalog.activeFilterCount > 0 ? "Фільтри · " + Catalog.activeFilterCount : "Фільтри")
+                tip: page.narrow ? "Фільтри" : ""
+                implicitHeight: 42
+                onClicked: filterPanel.open()
             }
         }
 
@@ -129,6 +149,65 @@ Item {
                 text: modelData
                 checked: index === Catalog.providerIndex
                 onClicked: Catalog.providerIndex = index
+            }
+        }
+
+        // Active filters, each removable on its own
+        Flow {
+            id: activeFilters
+            Layout.fillWidth: true
+            visible: tokens.length > 0
+            spacing: 6
+            readonly property var tokens: {
+                const t = []
+                const seasons = ["", "Зима", "Весна", "Літо", "Осінь"]
+                const kinds = ["", "ТБ-серіал", "Фільм", "OVA", "ONA", "Спешл"]
+                const sp = Catalog.support
+                if (sp.years > 0 && (Catalog.yearFrom || Catalog.yearTo)) {
+                    const l = Catalog.yearFrom, u = Catalog.yearTo
+                    t.push({ label: l && u ? (l === u ? String(l) : l + "–" + u) : (l ? "з " + l : "до " + u), key: "years" })
+                }
+                if (sp.season > 0 && Catalog.season) t.push({ label: seasons[Catalog.season], key: "season" })
+                if (sp.kinds > 0) for (const k of Catalog.kinds) t.push({ label: kinds[k], key: "kind", value: k })
+                if (sp.airing > 0 && Catalog.airing) t.push({ label: Catalog.airing === 1 ? "Онґоїнґ" : "Завершений", key: "airing" })
+                if (sp.age > 0 && Catalog.maxAge) t.push({ label: "До " + Catalog.maxAge + "+", key: "age" })
+                const sel = sp.genresMulti ? Catalog.selectedGenres : Catalog.selectedGenres.slice(0, 1)
+                for (const g of sel) {
+                    let label = g
+                    for (const x of Catalog.genres) if (x.value === g) label = x.label
+                    t.push({ label: label, key: "genre", value: g })
+                }
+                return t
+            }
+            function remove(tok) {
+                switch (tok.key) {
+                case "years": Catalog.yearFrom = 0; Catalog.yearTo = 0; break
+                case "season": Catalog.season = 0; break
+                case "kind": Catalog.toggleKind(tok.value); break
+                case "airing": Catalog.airing = 0; break
+                case "age": Catalog.maxAge = 0; break
+                case "genre": Catalog.toggleGenre(tok.value); break
+                }
+            }
+
+            Repeater {
+                model: activeFilters.tokens
+                Chip {
+                    id: tokenChip
+                    required property var modelData
+                    small: true
+                    checkable: false
+                    checked: true
+                    text: modelData.label + "   ✕"
+                    onClicked: activeFilters.remove(modelData)
+                }
+            }
+            Chip {
+                small: true
+                checkable: false
+                visible: activeFilters.tokens.length > 1
+                text: "Скинути все"
+                onClicked: Catalog.resetFilters()
             }
         }
     }
@@ -268,7 +347,7 @@ Item {
         message: {
             if (page.favorites && !Catalog.query && !Catalog.activeFilterCount)
                 return "Додавайте тайтли до улюблених на їхній сторінці, і вони з'являться тут."
-            if (Catalog.query || Catalog.activeFilterCount) return "Спробуйте інший запит або приберіть частину фільтрів."
+            if (Catalog.query || Catalog.activeFilterCount) return "Спробуйте інший запит або приберіть частину фільтрів. Частину фільтрів джерело перевіряє лише на кількох сторінках, тож прокрутка може знайти ще."
             return "Джерело не відповіло. Можливо, сайт тимчасово недоступний."
         }
         actionText: (Catalog.query || Catalog.activeFilterCount) ? "Скинути фільтри"
@@ -286,6 +365,8 @@ Item {
         }
     }
 
+    FilterPanel { id: filterPanel }
+
     // Typing anywhere on the page starts a search
     Keys.onPressed: event => {
         if (event.text.length === 1 && event.text.trim() !== "" && !(event.modifiers & Qt.ControlModifier)) {
@@ -296,4 +377,5 @@ Item {
         }
     }
     function focusSearch() { search.forceActiveFocus(); search.selectAll() }
+    function openFilters() { filterPanel.open() }
 }

@@ -2,6 +2,7 @@ import QtQuick
 
 // Drives the UI into a given state for screenshots during development.
 // ANDUB_DEV_ACTION: settings[:end] | downloads | favorites | details:<row> | play:<row> | testfile:<path> | reopen:<path>
+//                   filters[:<provider index>] (opens the filter panel) | filtered[:<provider index>] (sample filter applied)
 Item {
     readonly property var parts: devAction.split(":")
     readonly property string what: parts[0]
@@ -11,6 +12,17 @@ Item {
         interval: 2500
         running: true
         onTriggered: {
+            if (what === "filters" || what === "filtered") {
+                if (arg !== "") Catalog.providerIndex = parseInt(arg)
+                if (what === "filters") catalogPage.openFilters()
+                else {
+                    Catalog.sort = 2
+                    Catalog.selectedGenres = ["Комедия"]
+                    Catalog.kinds = [1]
+                    Catalog.yearFrom = 2015
+                }
+                return
+            }
             if (what === "settings" || what === "downloads" || what === "favorites") {
                 window.navigate(what)
                 if (arg === "end") {

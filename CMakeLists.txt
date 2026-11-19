@@ -116,6 +116,8 @@ qt_add_qml_module(andub
         qml/components/SeekBar.qml
         qml/components/VolumeSlider.qml
         qml/components/ToastHost.qml
+        qml/components/YearRange.qml
+        qml/components/FilterPanel.qml
         qml/pages/CatalogPage.qml
         qml/pages/DetailsPage.qml
         qml/pages/PlayerPage.qml
@@ -128,6 +130,7 @@ qt_add_qml_module(andub
         resources/icons/arrow-counter-clockwise.svg
         resources/icons/arrow-left.svg
         resources/icons/arrow-square-out.svg
+        resources/icons/arrows-down-up.svg
         resources/icons/caret-down.svg
         resources/icons/caret-right.svg
         resources/icons/check.svg
