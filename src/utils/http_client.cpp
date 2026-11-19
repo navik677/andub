@@ -60,6 +60,10 @@ HINTERNET open_session(bool keep_cookies) {
     }
     DWORD decompression = WINHTTP_DECOMPRESSION_FLAG_ALL;
     WinHttpSetOption(s, WINHTTP_OPTION_DECOMPRESSION, &decompression, sizeof decompression);
+    // HTTP/2 where the server offers it (Windows 10 1607+). Cloudflare-fronted
+    // sites (AniStar) answer plain HTTP/1.1 clients with a "Just a moment" 403.
+    DWORD http2 = WINHTTP_PROTOCOL_FLAG_HTTP2;
+    WinHttpSetOption(s, WINHTTP_OPTION_ENABLE_HTTP_PROTOCOL, &http2, sizeof http2);
     if (!keep_cookies) {
         // Requests without a cookie jar behave like plain curl: nothing is remembered
         DWORD flags = WINHTTP_DISABLE_COOKIES;
