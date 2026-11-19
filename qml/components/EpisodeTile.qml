@@ -9,6 +9,7 @@ Rectangle {
     property bool watched
     property bool busy
     property bool current: false
+    property real progress: 0   // 0..1 for an episode stopped midway
     signal play()
     signal download()
 
@@ -65,7 +66,12 @@ Rectangle {
                 elide: Text.ElideRight
             }
             Text {
-                text: tile.watched ? "Переглянуто" : (tile.current ? "Наступна" : "")
+                text: {
+                    if (tile.watched) return "Переглянуто"
+                    const pct = tile.progress > 0 ? Math.max(1, Math.round(tile.progress * 100)) + "%" : ""
+                    if (tile.current) return pct ? "Продовжити · " + pct : "Наступна"
+                    return pct ? "Переглянуто " + pct : ""
+                }
                 visible: text !== ""
                 color: tile.current && !tile.watched ? Theme.accent : Theme.textFaint
                 font.pixelSize: Theme.fontXs
@@ -86,6 +92,24 @@ Rectangle {
             size: 18
             color: Theme.textFaint
             Layout.rightMargin: 6
+        }
+    }
+
+    // How far into the episode the viewer got
+    Rectangle {
+        visible: tile.progress > 0 && !tile.watched
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 1
+        height: 3
+        radius: 1.5
+        color: Theme.surfaceHi2
+        Rectangle {
+            width: parent.width * Math.min(1, tile.progress)
+            height: parent.height
+            radius: parent.radius
+            color: Theme.accent
         }
     }
 

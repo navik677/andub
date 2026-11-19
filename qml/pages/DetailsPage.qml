@@ -197,7 +197,9 @@ Item {
                             text: {
                                 if (page.details.loading) return "Завантаження серій"
                                 if (page.episodeCount === 0) return "Немає серій"
-                                return page.details.watchedCount > 0 ? "Продовжити: серія " + page.details.resumeNumber : "Дивитись"
+                                if (!page.details.hasProgress) return "Дивитись"
+                                const at = page.details.resumePosition > 0 ? " з " + Theme.formatTime(page.details.resumePosition) : ""
+                                return (page.narrow ? "Серія " : "Продовжити: серія ") + page.details.resumeNumber + at
                             }
                             onClicked: page.startEpisode(page.resume)
                         }
@@ -252,6 +254,7 @@ Item {
             required property string number
             required property string title
             required property bool watched
+            required property real progress
             required property bool busy
             width: grid.cellWidth
             height: grid.cellHeight
@@ -262,7 +265,8 @@ Item {
                 title: parent.title
                 watched: parent.watched
                 busy: parent.busy
-                current: parent.index === page.resume && page.details.watchedCount > 0
+                current: parent.index === page.resume && page.details.hasProgress
+                progress: parent.progress
                 onPlay: page.startEpisode(parent.index)
                 onDownload: page.details.download(parent.index)
             }

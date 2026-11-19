@@ -34,6 +34,10 @@ class Details : public QObject {
     Q_PROPERTY(int watchedCount READ watchedCount NOTIFY progressChanged)
     Q_PROPERTY(int resumeIndex READ resumeIndex NOTIFY progressChanged)
     Q_PROPERTY(QString resumeNumber READ resumeNumber NOTIFY progressChanged)
+    // Seconds into the resume episode (0 = start it from the beginning)
+    Q_PROPERTY(double resumePosition READ resumePosition NOTIFY progressChanged)
+    // Anything to continue: a watched episode or a saved position
+    Q_PROPERTY(bool hasProgress READ hasProgress NOTIFY progressChanged)
 
 public:
     Details(Anime anime, std::shared_ptr<BaseProvider> provider, QObject* parent = nullptr);
@@ -54,12 +58,16 @@ public:
     int watchedCount() const { return episodes_.watchedCount(); }
     int resumeIndex() const;
     QString resumeNumber() const;
+    double resumePosition() const;
+    bool hasProgress() const { return watchedCount() > 0 || episodes_.lastInProgress() >= 0; }
 
     Q_INVOKABLE void toggleFavorite();
     Q_INVOKABLE void reload();
     Q_INVOKABLE anime::app::PlayerSession* createSession(int index);
     Q_INVOKABLE void playExternal(int index);
     Q_INVOKABLE void download(int index);
+    // Forget watched marks and saved positions of this title ("Переглянути знову")
+    Q_INVOKABLE void resetProgress();
 
 signals:
     void infoChanged();
@@ -69,6 +77,7 @@ signals:
 
 private:
     void markWatched(int index);
+    void progressSaved(int index, double fraction);
 
     Anime anime_;
     std::shared_ptr<BaseProvider> provider_;

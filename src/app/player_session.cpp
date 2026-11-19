@@ -1,4 +1,5 @@
 #include "player_session.hpp"
+#include <algorithm>
 #include "notifier.hpp"
 #include "../services/history_manager.hpp"
 #include "../services/player_service.hpp"
@@ -48,8 +49,13 @@ void PlayerSession::start(int index) {
     emit stateChanged();
 
     const Episode ep = episodes_[static_cast<size_t>(index)];
-    HistoryManager::mark_watched(anime_.provider, anime_.id, ep.number);
-    emit episodeWatched(index);
+    // Resume where this episode was left (watched episodes have no saved position)
+    double start_at = 0;
+    {
+        const auto progress = HistoryManager::get_progress(anime_.provider, anime_.id);
+        auto it = progress.find(ep.number);
+        if (it != progress.end()) start_at = it->second.position;
+    }
 
     const int req = ++request_;
     QtConcurrent::run([anime = anime_, ep, prov = provider_]() -> Stream {
@@ -58,7 +64,7 @@ void PlayerSession::start(int index) {
         } catch (...) {
             return {};
         }
-    }).then(this, [this, req](Stream s) {
+    }).then(this, [this, req, start_at](Stream s) {
         if (req != request_) return; // user already switched episodes
         resolving_ = false;
         const Quality* q = s.best();
@@ -74,7 +80,7 @@ void PlayerSession::start(int index) {
         quality_ = QString::fromStdString(q->label);
         stream_ = std::move(s);
         emit stateChanged();
-        emit streamReady(QString::fromStdString(url), headers);
+        emit streamReady(QString::fromStdString(url), headers, start_at);
     });
 }
 
@@ -97,6 +103,25 @@ void PlayerSession::openExternal(double position) {
         } catch (...) {}
         Notifier::post(QStringLiteral("Не вдалося отримати відео для цієї серії"), true);
     });
+}
+
+void PlayerSession::reportPosition(int index, double position, double duration) {
+    if (index < 0 || index >= count() || position <= 0) return;
+    const Episode& ep = episodes_[static_cast<size_t>(index)];
+    const bool near_end = duration > 0 && position >= duration * 0.9;
+    if (near_end) {
+        if (watched_.insert(index).second) {
+            HistoryManager::mark_watched(anime_.provider, anime_.id, ep.number);
+            HistoryManager::clear_progress(anime_.provider, anime_.id, ep.number);
+            emit episodeWatched(index);
+        }
+        return;
+    }
+    // The first seconds are the opening logo: not worth resuming from
+    if (position < 20) return;
+    // Keep a few seconds of context when resuming
+    HistoryManager::save_progress(anime_.provider, anime_.id, ep.number, std::max(0.0, position - 3), duration);
+    emit progressSaved(index, duration > 0 ? position / duration : 0);
 }
 
 } // namespace anime::app

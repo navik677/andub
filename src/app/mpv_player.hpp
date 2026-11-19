@@ -47,7 +47,8 @@ public:
     QString upscaler() const { return upscaler_; }
     void setUpscaler(const QString& id);
 
-    Q_INVOKABLE void load(const QString& url, const QVariantMap& headers);
+    // start: seconds to begin at (resume); 0 = from the beginning
+    Q_INVOKABLE void load(const QString& url, const QVariantMap& headers, double start = 0);
     Q_INVOKABLE void stop();
     Q_INVOKABLE void togglePause() { setPaused(!paused_); }
     Q_INVOKABLE void seek(double seconds);

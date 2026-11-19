@@ -6,6 +6,7 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 #include <memory>
+#include <set>
 #include <vector>
 #include "../models/anime.hpp"
 #include "../models/episode.hpp"
@@ -54,12 +55,18 @@ public:
     Q_INVOKABLE void retry() { start(index_); }
     // Hands the current stream to an external mpv window, resuming at `position`.
     Q_INVOKABLE void openExternal(double position);
+    // Called by the player every few seconds, on episode switch and on close.
+    // Near the end (90%) the episode counts as watched and its saved position
+    // is dropped; otherwise the position is kept for "Продовжити".
+    Q_INVOKABLE void reportPosition(int index, double position, double duration);
 
 signals:
     void indexChanged();
     void stateChanged();
-    void streamReady(const QString& url, const QVariantMap& headers);
+    // start: seconds to resume from (0 = from the beginning)
+    void streamReady(const QString& url, const QVariantMap& headers, double start);
     void episodeWatched(int index);
+    void progressSaved(int index, double fraction);
 
 private:
     Anime anime_;
@@ -71,6 +78,7 @@ private:
     QString error_;
     QString quality_;
     Stream stream_;
+    std::set<int> watched_;   // marked watched during this session
 };
 
 } // namespace anime::app

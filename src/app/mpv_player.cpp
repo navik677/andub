@@ -180,7 +180,7 @@ QQuickFramebufferObject::Renderer* MpvPlayer::createRenderer() const {
     return new MpvRenderer(shared_);
 }
 
-void MpvPlayer::load(const QString& url, const QVariantMap& headers) {
+void MpvPlayer::load(const QString& url, const QVariantMap& headers, double start) {
     mpv_handle* mpv = shared_->mpv;
     if (!mpv) return;
 
@@ -207,6 +207,10 @@ void MpvPlayer::load(const QString& url, const QVariantMap& headers) {
     node.format = MPV_FORMAT_NODE_ARRAY;
     node.u.list = &list;
     mpv_set_property(mpv, "http-header-fields", MPV_FORMAT_NODE, &node);
+
+    // "start" applies to the next file loaded; reset it so later files begin at 0
+    const QByteArray start_at = start > 1 ? QByteArray::number(start, 'f', 1) : QByteArray("none");
+    mpv_set_property_string(mpv, "start", start_at.constData());
 
     const QByteArray u = url.toUtf8();
     const char* cmd[] = {"loadfile", u.constData(), nullptr};

@@ -63,13 +63,21 @@ QString Details::providerName() const {
 }
 
 int Details::resumeIndex() const {
-    // Continue from the first unwatched episode after the last watched one
+    // An episode stopped midway wins, the most recently watched one first...
+    const int in_progress = episodes_.lastInProgress();
+    if (in_progress >= 0) return in_progress;
+    // ...otherwise the episode after the last watched one
     int last = -1;
     for (int i = 0; i < episodes_.count(); ++i) {
         if (episodes_.isWatched(i)) last = i;
     }
     if (last < 0) return 0;
     return std::min(last + 1, episodes_.count() - 1);
+}
+
+double Details::resumePosition() const {
+    const int i = episodes_.lastInProgress();
+    return i >= 0 && i == resumeIndex() ? episodes_.progress(i).position : 0;
 }
 
 QString Details::resumeNumber() const {
@@ -84,7 +92,12 @@ void Details::reload() {
     QtConcurrent::run([a = anime_, p = provider_]() -> std::vector<Episode> {
         try { return p->get_episodes(a); } catch (...) { return {}; }
     }).then(this, [this](std::vector<Episode> eps) {
-        episodes_.reset(std::move(eps), HistoryManager::get_watched_episodes(anime_.provider, anime_.id));
+        std::map<std::string, EpisodeListModel::Progress> progress;
+        for (const auto& [num, p] : HistoryManager::get_progress(anime_.provider, anime_.id)) {
+            progress[num] = {p.duration > 0 ? p.position / p.duration : 0, p.position, p.updated};
+        }
+        episodes_.reset(std::move(eps), HistoryManager::get_watched_episodes(anime_.provider, anime_.id),
+                        std::move(progress));
         loading_ = false;
         emit loadingChanged();
     });
@@ -100,11 +113,25 @@ void Details::markWatched(int index) {
     episodes_.setWatched(index);
 }
 
+void Details::progressSaved(int index, double fraction) {
+    // Mirror what the session just saved (it stores position - 3 s)
+    const auto all = HistoryManager::get_progress(anime_.provider, anime_.id);
+    if (index < 0 || index >= episodes_.count()) return;
+    auto it = all.find(episodes_.items()[static_cast<size_t>(index)].number);
+    episodes_.setProgress(index, fraction, it != all.end() ? it->second.position : 0);
+}
+
+void Details::resetProgress() {
+    HistoryManager::reset_title(anime_.provider, anime_.id);
+    episodes_.reset(episodes_.items(), {}, {});
+}
+
 PlayerSession* Details::createSession(int index) {
     if (index < 0 || index >= episodes_.count()) return nullptr;
     auto* s = new PlayerSession(anime_, episodes_.items(), index, provider_);
     QQmlEngine::setObjectOwnership(s, QQmlEngine::JavaScriptOwnership);
     connect(s, &PlayerSession::episodeWatched, this, &Details::markWatched);
+    connect(s, &PlayerSession::progressSaved, this, &Details::progressSaved);
     return s;
 }
 

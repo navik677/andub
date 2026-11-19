@@ -19,7 +19,15 @@ Rectangle {
     readonly property bool showControls: controlsVisible || mpv.paused || menusOpen || seekBar.dragging
                                          || session.resolving || session.error !== ""
 
+    // Episode the loaded video belongs to (session.index moves first on a switch)
+    property int playingIndex: -1
+    function savePosition() {
+        if (playingIndex >= 0 && mpv.hasMedia && mpv.duration > 0)
+            session.reportPosition(playingIndex, mpv.position, mpv.duration)
+    }
+
     function close() {
+        savePosition()
         mpv.stop()
         if (fullscreen) toggleFullscreen()
         page.closed()
@@ -75,19 +83,38 @@ Rectangle {
 
     Connections {
         target: page.session
-        function onStreamReady(url, headers) { mpv.load(url, headers) }
+        function onStreamReady(url, headers, start) {
+            mpv.load(url, headers, start)
+            page.playingIndex = page.session.index
+            if (start > 1) osd.show("Продовжуємо з " + Theme.formatTime(start), 2500)
+        }
+        // Still the previous episode's video at this point: keep its position
+        function onIndexChanged() { page.savePosition() }
     }
 
     MpvPlayer {
         id: mpv
         anchors.fill: parent
         onEndReached: {
+            page.session.reportPosition(page.playingIndex, mpv.duration, mpv.duration)
             if (page.session.hasNext) {
                 osd.show("Наступна серія")
                 page.session.next()
             }
         }
         onLoadFailed: osd.show("Потік не відтворюється", 3000)
+    }
+
+    // Position autosave for "Продовжити"
+    Timer {
+        interval: 5000
+        repeat: true
+        running: mpv.hasMedia && !mpv.paused
+        onTriggered: page.savePosition()
+    }
+    Connections {
+        target: mpv
+        function onPausedChanged() { if (mpv.paused) page.savePosition() }
     }
 
     Timer {

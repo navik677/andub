@@ -2,6 +2,7 @@
 
 #include <QAbstractListModel>
 #include <QtQml/qqmlregistration.h>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -15,7 +16,7 @@ class EpisodeListModel : public QAbstractListModel {
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
-    enum Role { NumberRole = Qt::UserRole + 1, TitleRole, LabelRole, WatchedRole, BusyRole };
+    enum Role { NumberRole = Qt::UserRole + 1, TitleRole, LabelRole, WatchedRole, BusyRole, ProgressRole };
 
     using QAbstractListModel::QAbstractListModel;
 
@@ -28,8 +29,19 @@ public:
     bool isWatched(int row) const;
     int watchedCount() const;
 
-    void reset(std::vector<Episode> items, std::set<std::string> watched);
+    // Where the viewer stopped in an unfinished episode
+    struct Progress {
+        double fraction = 0;   // 0..1, 0 if the duration is unknown
+        double position = 0;   // seconds
+        long long updated = 0; // unix time
+    };
+
+    void reset(std::vector<Episode> items, std::set<std::string> watched, std::map<std::string, Progress> progress = {});
     void setWatched(int row);
+    void setProgress(int row, double fraction, double position);
+    Progress progress(int row) const;
+    // Row with the most recently saved position, -1 if none
+    int lastInProgress() const;
     void setBusy(int row, bool busy);
 
 signals:
@@ -38,6 +50,7 @@ signals:
 private:
     std::vector<Episode> items_;
     std::set<std::string> watched_;
+    std::map<std::string, Progress> progress_;
     std::set<int> busy_;
 };
 
