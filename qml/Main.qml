@@ -16,9 +16,15 @@ ApplicationWindow {
     property string section: Catalog.favoritesMode ? "favorites" : "catalog"
 
     function navigate(target) {
-        if (target === "catalog" || target === "favorites") {
+        if (target === "catalog") {
+            // Always the front page: no search, filters or sorting left over
             browse.pop(null)
-            Catalog.favoritesMode = target === "favorites"
+            catalogPage.goHome()
+            pages.currentIndex = 0
+            section = target
+        } else if (target === "favorites") {
+            browse.pop(null)
+            Catalog.favoritesMode = true
             pages.currentIndex = 0
             section = target
         } else {

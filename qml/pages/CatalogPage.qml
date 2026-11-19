@@ -378,4 +378,12 @@ Item {
     }
     function focusSearch() { search.forceActiveFocus(); search.selectAll() }
     function openFilters() { filterPanel.open() }
+    // Back to the front page of the current source (see Catalog.goHome)
+    function goHome() {
+        searchDebounce.stop()
+        search.text = ""
+        filterPanel.close()
+        grid.contentY = grid.originY
+        Catalog.goHome()
+    }
 }

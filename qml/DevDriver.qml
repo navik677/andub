@@ -3,6 +3,7 @@ import QtQuick
 // Drives the UI into a given state for screenshots during development.
 // ANDUB_DEV_ACTION: settings[:end] | downloads | favorites | details:<row> | play:<row> | testfile:<path> | reopen:<path>
 //                   filters[:<provider index>] (opens the filter panel) | filtered[:<provider index>] (sample filter applied)
+//                   gohome[:<provider index>] (filter + search + details page, then "Каталог" in the rail)
 Item {
     readonly property var parts: devAction.split(":")
     readonly property string what: parts[0]
@@ -12,6 +13,14 @@ Item {
         interval: 2500
         running: true
         onTriggered: {
+            if (what === "gohome") {
+                if (arg !== "") Catalog.providerIndex = parseInt(arg)
+                Catalog.sort = 2
+                Catalog.kinds = [1]
+                Catalog.query = "а"
+                home.start()
+                return
+            }
             if (what === "filters" || what === "filtered") {
                 if (arg !== "") Catalog.providerIndex = parseInt(arg)
                 if (what === "filters") catalogPage.openFilters()
@@ -73,4 +82,19 @@ Item {
         }
     }
     property bool reopened: false
+    Timer {
+        id: home
+        interval: 6000
+        property int step: 0
+        // also logs the state at each step: [gohome] depth=... (QT_FORCE_STDERR_LOGGING=1)
+        onTriggered: {
+            const state = () => console.log("[gohome] depth=" + browse.depth + " section=" + window.section
+                + " query='" + Catalog.query + "' sort=" + Catalog.sort + " kinds=" + JSON.stringify(Catalog.kinds)
+                + " filters=" + Catalog.activeFilterCount + " favorites=" + Catalog.favoritesMode
+                + " results=" + Catalog.results.count + " loading=" + Catalog.loading)
+            if (step === 0) { window.openDetails(0); state(); step = 1; restart() }
+            else if (step === 1) { window.navigate("catalog"); state(); step = 2; restart() }
+            else state()
+        }
+    }
 }

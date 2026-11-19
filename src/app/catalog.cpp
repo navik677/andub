@@ -164,6 +164,23 @@ void Catalog::resetFilters() {
     filterEdited();
 }
 
+void Catalog::goHome() {
+    const bool changed = !filter_.empty() || !query_.isEmpty() || favorites_;
+    filter_ = CatalogFilter{};
+    if (!query_.isEmpty()) {
+        query_.clear();
+        emit queryChanged();
+    }
+    if (favorites_) {
+        favorites_ = false;
+        emit favoritesModeChanged();
+        emit supportChanged();
+    }
+    emit filterChanged();
+    filter_debounce_.stop();
+    if (changed) refresh();
+}
+
 void Catalog::filterEdited() {
     emit filterChanged();
     filter_debounce_.start();

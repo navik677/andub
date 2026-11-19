@@ -99,6 +99,9 @@ public:
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void loadMore();
     Q_INVOKABLE void resetFilters();
+    // "Каталог" in the navigation rail: the provider's front page, i.e. no
+    // search, no filters, default order, not in favorites. One reload at most.
+    Q_INVOKABLE void goHome();
     Q_INVOKABLE void toggleGenre(const QString& value);
     Q_INVOKABLE void toggleKind(int kind);
     Q_INVOKABLE anime::app::Details* openDetails(int row);
