@@ -9,8 +9,9 @@
 
 namespace anime {
 
+// In-memory cookie session (see http::Client): keeps the DLE PHPSESSID between requests
 static std::string get_anitube_cookie_file() {
-    return "/tmp/andub_anitube_cookies.txt";
+    return "anitube";
 }
 
 static std::string anitube_url_encode(const std::string& value) {

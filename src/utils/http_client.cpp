@@ -1,256 +1,223 @@
+// HTTP client on WinHTTP: no extra DLLs, TLS and certificates come from the
+// system (Schannel + Windows certificate store), proxy settings follow Windows.
 #include "http_client.hpp"
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <array>
-#include <memory>
-#include <cstdio>
 
-#ifdef HAVE_LIBCURL
-#include <curl/curl.h>
+#include <windows.h>
+#include <winhttp.h>
+
+#include <cstdio>
+#include <mutex>
+#include <unordered_map>
 
 namespace {
-size_t write_callback(void* contents, size_t size, size_t nmemb, void* userp) {
-    size_t total_size = size * nmemb;
-    std::string* str = static_cast<std::string*>(userp);
-    str->append(static_cast<char*>(contents), total_size);
-    return total_size;
+
+constexpr wchar_t kUserAgent[] =
+    L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+std::wstring widen(const std::string& s) {
+    if (s.empty()) return {};
+    const int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+    std::wstring out(static_cast<size_t>(n), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), out.data(), n);
+    return out;
 }
 
-size_t file_write_callback(void* ptr, size_t size, size_t nmemb, FILE* stream) {
-    return fwrite(ptr, size, nmemb, stream);
+std::string win_error(DWORD code) {
+    char buf[64];
+    std::snprintf(buf, sizeof buf, "WinHTTP error %lu", static_cast<unsigned long>(code));
+    switch (code) {
+    case ERROR_WINHTTP_TIMEOUT: return "Timeout was reached";
+    case ERROR_WINHTTP_NAME_NOT_RESOLVED: return "Couldn't resolve host name";
+    case ERROR_WINHTTP_CANNOT_CONNECT: return "Couldn't connect to server";
+    case ERROR_WINHTTP_SECURE_FAILURE: return "SSL connect error";
+    case ERROR_WINHTTP_CONNECTION_ERROR: return "Connection reset";
+    case ERROR_WINHTTP_REDIRECT_FAILED: return "Redirect failed";
+    default: return buf;
+    }
 }
 
-// The Windows build ships libcurl without a CA bundle next to it; use the
-// system certificate store instead so HTTPS works out of the box.
-void apply_platform_tls([[maybe_unused]] CURL* curl) {
-#ifdef _WIN32
-    curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, static_cast<long>(CURLSSLOPT_NATIVE_CA));
-#endif
+struct Handle {
+    HINTERNET h = nullptr;
+    Handle() = default;
+    explicit Handle(HINTERNET x) : h(x) {}
+    Handle(const Handle&) = delete;
+    Handle& operator=(const Handle&) = delete;
+    ~Handle() { if (h) WinHttpCloseHandle(h); }
+    explicit operator bool() const { return h != nullptr; }
+};
+
+HINTERNET open_session(bool keep_cookies) {
+    HINTERNET s = WinHttpOpen(kUserAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                              WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!s) // WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY needs Windows 8.1+
+        s = WinHttpOpen(kUserAgent, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!s) return nullptr;
+    DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+    if (!WinHttpSetOption(s, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof protocols)) {
+        protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2; // TLS 1.3 needs Windows 11
+        WinHttpSetOption(s, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof protocols);
+    }
+    DWORD decompression = WINHTTP_DECOMPRESSION_FLAG_ALL;
+    WinHttpSetOption(s, WINHTTP_OPTION_DECOMPRESSION, &decompression, sizeof decompression);
+    if (!keep_cookies) {
+        // Requests without a cookie jar behave like plain curl: nothing is remembered
+        DWORD flags = WINHTTP_DISABLE_COOKIES;
+        WinHttpSetOption(s, WINHTTP_OPTION_DISABLE_FEATURE, &flags, sizeof flags);
+    }
+    return s;
 }
+
+// Sessions live for the whole process. WinHTTP keeps cookies per session handle,
+// so a named jar ("anitube") is simply its own session.
+std::mutex g_sessions_mutex;
+std::unordered_map<std::string, HINTERNET> g_sessions;
+
+HINTERNET session_for(const std::string& jar) {
+    std::lock_guard lock(g_sessions_mutex);
+    auto it = g_sessions.find(jar);
+    if (it != g_sessions.end()) return it->second;
+    HINTERNET s = open_session(!jar.empty());
+    if (s) g_sessions.emplace(jar, s);
+    return s;
+}
+
+// Sink receives response body chunks; returns false to abort.
+template <typename Sink>
+anime::http::Response perform(const std::wstring& method, const std::string& url, const std::string* body,
+                              const std::map<std::string, std::string>& headers, int timeout_sec,
+                              const std::string& jar, Sink&& sink) {
+    anime::http::Response resp;
+    const std::wstring wurl = widen(url);
+
+    URL_COMPONENTS uc{};
+    uc.dwStructSize = sizeof uc;
+    uc.dwHostNameLength = static_cast<DWORD>(-1);
+    uc.dwUrlPathLength = static_cast<DWORD>(-1);
+    uc.dwExtraInfoLength = static_cast<DWORD>(-1);
+    if (!WinHttpCrackUrl(wurl.c_str(), static_cast<DWORD>(wurl.size()), 0, &uc)) {
+        resp.error = "URL using bad/illegal format";
+        return resp;
+    }
+    const std::wstring host(uc.lpszHostName, uc.dwHostNameLength);
+    std::wstring path(uc.lpszUrlPath, uc.dwUrlPathLength);
+    path.append(uc.lpszExtraInfo, uc.dwExtraInfoLength);
+    if (path.empty()) path = L"/";
+    const bool https = uc.nScheme == INTERNET_SCHEME_HTTPS;
+
+    HINTERNET session = session_for(jar);
+    if (!session) {
+        resp.error = win_error(GetLastError());
+        return resp;
+    }
+    Handle conn(WinHttpConnect(session, host.c_str(), uc.nPort, 0));
+    if (!conn) {
+        resp.error = win_error(GetLastError());
+        return resp;
+    }
+    Handle req(WinHttpOpenRequest(conn.h, method.c_str(), path.c_str(), nullptr, WINHTTP_NO_REFERER,
+                                  WINHTTP_DEFAULT_ACCEPT_TYPES, https ? WINHTTP_FLAG_SECURE : 0));
+    if (!req) {
+        resp.error = win_error(GetLastError());
+        return resp;
+    }
+    const int ms = timeout_sec * 1000;
+    WinHttpSetTimeouts(req.h, ms, ms, ms, ms);
+    DWORD redirect = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS; // follow https -> http too, like curl -L
+    WinHttpSetOption(req.h, WINHTTP_OPTION_REDIRECT_POLICY, &redirect, sizeof redirect);
+
+    std::wstring header_block;
+    bool has_content_type = false;
+    for (const auto& [k, v] : headers) {
+        if (_stricmp(k.c_str(), "Content-Type") == 0) has_content_type = true;
+        // A provider's own User-Agent header replaces the session default (FLAG_REPLACE)
+        header_block += widen(k) + L": " + widen(v) + L"\r\n";
+    }
+    if (body && !has_content_type) header_block += L"Content-Type: application/x-www-form-urlencoded\r\n";
+    if (!header_block.empty())
+        WinHttpAddRequestHeaders(req.h, header_block.c_str(), static_cast<DWORD>(-1L),
+                                 WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE);
+
+    LPVOID data = body ? const_cast<char*>(body->data()) : WINHTTP_NO_REQUEST_DATA;
+    const DWORD len = body ? static_cast<DWORD>(body->size()) : 0;
+    if (!WinHttpSendRequest(req.h, WINHTTP_NO_ADDITIONAL_HEADERS, 0, data, len, len, 0) ||
+        !WinHttpReceiveResponse(req.h, nullptr)) {
+        resp.error = win_error(GetLastError());
+        return resp;
+    }
+
+    DWORD status = 0, size = sizeof status;
+    WinHttpQueryHeaders(req.h, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX,
+                        &status, &size, WINHTTP_NO_HEADER_INDEX);
+    resp.status_code = static_cast<int>(status);
+
+    char buf[64 * 1024];
+    for (;;) {
+        DWORD got = 0;
+        if (!WinHttpReadData(req.h, buf, sizeof buf, &got)) {
+            resp.error = win_error(GetLastError());
+            break;
+        }
+        if (got == 0) break;
+        if (!sink(buf, got)) {
+            resp.error = "Write error";
+            break;
+        }
+    }
+    return resp;
+}
+
 } // namespace
-#endif
 
 namespace anime::http {
 
-Response Client::get(const std::string& url, const std::map<std::string, std::string>& headers, int timeout_sec, const std::string& cookie_file) {
-#ifdef HAVE_LIBCURL
-    Response resp;
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        resp.error = "Failed to initialize CURL";
-        return resp;
-    }
-
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec));
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0");
-    apply_platform_tls(curl);
-
-    if (!cookie_file.empty()) {
-        curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookie_file.c_str());
-        curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookie_file.c_str());
-    }
-
-    struct curl_slist* chunk = nullptr;
-    for (const auto& [k, v] : headers) {
-        std::string h = k + ": " + v;
-        chunk = curl_slist_append(chunk, h.c_str());
-    }
-    if (chunk) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
-
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp.body);
-
-    CURLcode res = curl_easy_perform(curl);
-    if (res != CURLE_OK) {
-        resp.error = curl_easy_strerror(res);
-    } else {
-        long http_code = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-        resp.status_code = static_cast<int>(http_code);
-    }
-
-    if (chunk) curl_slist_free_all(chunk);
-    curl_easy_cleanup(curl);
-    return resp;
-#else
-    // Fallback using system curl CLI
-    Response resp;
-    std::ostringstream cmd;
-    cmd << "curl -s -L --max-time " << timeout_sec << " -A \"Mozilla/5.0 (X11; Linux x86_64)\" ";
-    if (!cookie_file.empty()) {
-        cmd << "-b \"" << cookie_file << "\" -c \"" << cookie_file << "\" ";
-    }
-    for (const auto& [k, v] : headers) {
-        cmd << "-H \"" << k << ": " << v << "\" ";
-    }
-    cmd << "-w \"\\n%{http_code}\" \"" << url << "\"";
-
-    std::array<char, 4096> buffer;
-    std::string output;
-    FILE* pipe = popen(cmd.str().c_str(), "r");
-    if (!pipe) {
-        resp.error = "Failed to run curl";
-        return resp;
-    }
-    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
-        output += buffer.data();
-    }
-    pclose(pipe);
-
-    size_t last_newline = output.find_last_of('\n');
-    if (last_newline != std::string::npos) {
-        std::string code_str = output.substr(last_newline + 1);
-        try {
-            resp.status_code = std::stoi(code_str);
-            resp.body = output.substr(0, last_newline);
-        } catch (...) {
-            resp.body = output;
-            resp.status_code = 200;
-        }
-    } else {
-        resp.body = output;
-        resp.status_code = 200;
-    }
-    return resp;
-#endif
+Response Client::get(const std::string& url, const std::map<std::string, std::string>& headers, int timeout_sec,
+                     const std::string& cookie_jar) {
+    std::string out;
+    Response r = perform(L"GET", url, nullptr, headers, timeout_sec, cookie_jar, [&](const char* p, DWORD n) {
+        out.append(p, n);
+        return true;
+    });
+    r.body = std::move(out);
+    return r;
 }
 
-Response Client::post(const std::string& url, const std::string& data, const std::map<std::string, std::string>& headers, int timeout_sec, const std::string& cookie_file) {
-#ifdef HAVE_LIBCURL
-    Response resp;
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        resp.error = "Failed to initialize CURL";
-        return resp;
-    }
-
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec));
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0");
-    apply_platform_tls(curl);
-
-    if (!cookie_file.empty()) {
-        curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookie_file.c_str());
-        curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookie_file.c_str());
-    }
-
-    struct curl_slist* chunk = nullptr;
-    for (const auto& [k, v] : headers) {
-        std::string h = k + ": " + v;
-        chunk = curl_slist_append(chunk, h.c_str());
-    }
-    if (chunk) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
-
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp.body);
-
-    CURLcode res = curl_easy_perform(curl);
-    if (res != CURLE_OK) {
-        resp.error = curl_easy_strerror(res);
-    } else {
-        long http_code = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-        resp.status_code = static_cast<int>(http_code);
-    }
-
-    if (chunk) curl_slist_free_all(chunk);
-    curl_easy_cleanup(curl);
-    return resp;
-#else
-    Response resp;
-    std::ostringstream cmd;
-    cmd << "curl -s -L --max-time " << timeout_sec << " -A \"Mozilla/5.0 (X11; Linux x86_64)\" ";
-    if (!cookie_file.empty()) {
-        cmd << "-b \"" << cookie_file << "\" -c \"" << cookie_file << "\" ";
-    }
-    for (const auto& [k, v] : headers) {
-        cmd << "-H \"" << k << ": " << v << "\" ";
-    }
-    std::string safe_data;
-    for (char c : data) {
-        if (c == '\'') safe_data += "'\\''";
-        else safe_data += c;
-    }
-    cmd << "-d '" << safe_data << "' -w \"\\n%{http_code}\" \"" << url << "\"";
-
-    std::array<char, 4096> buffer;
-    std::string output;
-    FILE* pipe = popen(cmd.str().c_str(), "r");
-    if (!pipe) {
-        resp.error = "Failed to run curl";
-        return resp;
-    }
-    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
-        output += buffer.data();
-    }
-    pclose(pipe);
-
-    size_t last_newline = output.find_last_of('\n');
-    if (last_newline != std::string::npos) {
-        std::string code_str = output.substr(last_newline + 1);
-        try {
-            resp.status_code = std::stoi(code_str);
-            resp.body = output.substr(0, last_newline);
-        } catch (...) {
-            resp.body = output;
-            resp.status_code = 200;
-        }
-    } else {
-        resp.body = output;
-        resp.status_code = 200;
-    }
-    return resp;
-#endif
+Response Client::post(const std::string& url, const std::string& data, const std::map<std::string, std::string>& headers,
+                      int timeout_sec, const std::string& cookie_jar) {
+    std::string out;
+    Response r = perform(L"POST", url, &data, headers, timeout_sec, cookie_jar, [&](const char* p, DWORD n) {
+        out.append(p, n);
+        return true;
+    });
+    r.body = std::move(out);
+    return r;
 }
 
-std::future<Response> Client::get_async(std::string url, std::map<std::string, std::string> headers, int timeout_sec, std::string cookie_file) {
-    return std::async(std::launch::async, [url = std::move(url), headers = std::move(headers), timeout_sec, cookie_file = std::move(cookie_file)]() {
-        return get(url, headers, timeout_sec, cookie_file);
+std::future<Response> Client::get_async(std::string url, std::map<std::string, std::string> headers, int timeout_sec,
+                                        std::string cookie_jar) {
+    return std::async(std::launch::async, [url = std::move(url), headers = std::move(headers), timeout_sec,
+                                           cookie_jar = std::move(cookie_jar)]() {
+        return get(url, headers, timeout_sec, cookie_jar);
     });
 }
 
-std::future<Response> Client::post_async(std::string url, std::string data, std::map<std::string, std::string> headers, int timeout_sec, std::string cookie_file) {
-    return std::async(std::launch::async, [url = std::move(url), data = std::move(data), headers = std::move(headers), timeout_sec, cookie_file = std::move(cookie_file)]() {
-        return post(url, data, headers, timeout_sec, cookie_file);
+std::future<Response> Client::post_async(std::string url, std::string data, std::map<std::string, std::string> headers,
+                                         int timeout_sec, std::string cookie_jar) {
+    return std::async(std::launch::async, [url = std::move(url), data = std::move(data), headers = std::move(headers),
+                                           timeout_sec, cookie_jar = std::move(cookie_jar)]() {
+        return post(url, data, headers, timeout_sec, cookie_jar);
     });
 }
 
 bool Client::download_file(const std::string& url, const std::string& dest_path, int timeout_sec) {
-#ifdef HAVE_LIBCURL
-    CURL* curl = curl_easy_init();
-    if (!curl) return false;
-
-    FILE* fp = fopen(dest_path.c_str(), "wb");
-    if (!fp) {
-        curl_easy_cleanup(curl);
-        return false;
-    }
-
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec));
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0");
-    apply_platform_tls(curl);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, file_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+    FILE* fp = _wfopen(widen(dest_path).c_str(), L"wb");
+    if (!fp) return false;
+    Response r = perform(L"GET", url, nullptr, {}, timeout_sec, {}, [&](const char* p, DWORD n) {
+        return std::fwrite(p, 1, n, fp) == n;
+    });
+    std::fclose(fp);
     // Don't cache a 404/403 error page as if it were an image
-    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-
-    CURLcode res = curl_easy_perform(curl);
-    fclose(fp);
-    curl_easy_cleanup(curl);
-    return (res == CURLE_OK);
-#else
-    std::ostringstream cmd;
-    cmd << "curl -s -L --max-time " << timeout_sec << " -A \"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36\" -o \"" << dest_path << "\" \"" << url << "\"";
-    return (std::system(cmd.str().c_str()) == 0);
-#endif
+    return r.error.empty() && r.success();
 }
 
 } // namespace anime::http
