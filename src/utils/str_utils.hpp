@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <vector>
+#include <initializer_list>
 #include <sstream>
 #include <iomanip>
 #include <cctype>
@@ -19,6 +21,27 @@ inline bool utf8_contains_ci(const std::string& haystack, const std::string& nee
 inline std::string utf8_tolower(const std::string& str) {
     if (str.empty()) return "";
     return QString::fromStdString(str).toLower().toStdString();
+}
+
+// Cuts a page into blocks that start at each `start` marker and end before
+// the next one (or before the first `stop` marker after it). Use this instead
+// of a "[\s\S]*?(?=...)" regex: MSVC's std::regex recurses per character and
+// throws on pages of a few hundred KB.
+inline std::vector<std::string> split_blocks(const std::string& html, const std::string& start,
+                                             std::initializer_list<const char*> stops = {}) {
+    std::vector<std::string> out;
+    size_t pos = html.find(start);
+    while (pos != std::string::npos) {
+        size_t next = html.find(start, pos + start.size());
+        size_t end = next == std::string::npos ? html.size() : next;
+        for (const char* stop : stops) {
+            const size_t s = html.find(stop, pos + start.size());
+            if (s != std::string::npos && s < end) end = s;
+        }
+        out.push_back(html.substr(pos, end - pos));
+        pos = next;
+    }
+    return out;
 }
 
 inline std::string trim(const std::string& str) {

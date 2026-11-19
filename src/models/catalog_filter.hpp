@@ -89,13 +89,13 @@ inline const std::vector<GenreName>& genre_table() {
 }
 
 namespace detail {
-// "Сёнен" / "Сьонен" / "Shounen" spellings differ; compare the first letters of
-// a lowercase, ё->е folded form, which is enough to tell catalog genres apart.
+// "Сёнен" / "Сэйнэн" / "Сейнен" spellings differ: compare a lowercase form with
+// ё and э folded to е and spaces/hyphens dropped.
 inline std::string genre_key(const std::string& s) {
     std::string l = utils::utf8_tolower(utils::trim(s));
     std::string out;
     for (size_t i = 0; i < l.size(); ++i) {
-        if (l.compare(i, 2, "ё") == 0) { out += "е"; ++i; continue; }
+        if (l.compare(i, 2, "ё") == 0 || l.compare(i, 2, "э") == 0) { out += "е"; ++i; continue; }
         if (l[i] == ' ' || l[i] == '-') continue;
         out += l[i];
     }

@@ -1,6 +1,9 @@
 #include "anitube_provider.hpp"
 #include "../utils/http_client.hpp"
 #include "../utils/str_utils.hpp"
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <regex>
 #include <sstream>
@@ -143,11 +146,15 @@ std::vector<Anime> AniTubeProvider::search(const std::string& query, int limit, 
         return {};
     }
 
+    return parse_story_list(resp.body, limit);
+}
+
+std::vector<Anime> AniTubeProvider::parse_story_list(const std::string& body, int limit) const {
     std::vector<Anime> results;
 
     // Pattern: <article class="story">...</article>
     std::regex story_re(R"raw(<article\s+class="story"[\s\S]*?</article>)raw");
-    auto words_begin = std::sregex_iterator(resp.body.begin(), resp.body.end(), story_re);
+    auto words_begin = std::sregex_iterator(body.begin(), body.end(), story_re);
     auto words_end = std::sregex_iterator();
 
     std::regex title_re(R"raw(<h2[^>]*itemprop="name"><a\s+href="([^"]+)">([^<]+)</a>)raw");
@@ -157,6 +164,10 @@ std::vector<Anime> AniTubeProvider::search(const std::string& query, int limit, 
     std::regex year_re(R"raw((?:Рік виходу[^<]*:|year/)\s*(?:<[^>]+>)?\s*(\d{4}))raw");
     std::regex rating_re(R"raw(<span>([\d.]+)</span>/<span>10</span>)raw");
     std::regex cat_re(R"raw(<dt>Категорія:</dt>([^<]+))raw");
+    // "<dt>Серій:</dt> 9 з 12 (25 хв.)"
+    std::regex eps_re(R"raw(<dt>Серій:</dt>\s*(\d+)\s*з\s*(\d+|XX|\?+)?\s*(?:\((\d+)\s*хв)?)raw");
+    // 10 stars, 25 px each
+    std::regex stars_re(R"raw(class="starbar_w"\s+style="width:\s*([\d.]+)px)raw");
 
     for (std::sregex_iterator it = words_begin; it != words_end; ++it) {
         std::string story_html = it->str();
@@ -199,6 +210,33 @@ std::vector<Anime> AniTubeProvider::search(const std::string& query, int limit, 
         std::smatch rmatch;
         if (std::regex_search(story_html, rmatch, rating_re)) {
             a.rating = rmatch[1].str();
+        }
+
+        // Episodes -> airing status and (roughly) kind
+        std::smatch ematch;
+        if (std::regex_search(story_html, ematch, eps_re)) {
+            const int aired = std::atoi(ematch[1].str().c_str());
+            const std::string total_s = ematch[2].str();
+            const int total = std::atoi(total_s.c_str());
+            const int minutes = ematch[3].matched ? std::atoi(ematch[3].str().c_str()) : 0;
+            if (total > 0) a.airing = airing_from_episode_counts(aired, total);
+            else if (!total_s.empty()) a.airing = Airing::Ongoing; // "з XX": total unknown yet
+            // The card has no type field: a single long episode is a film
+            if (total == 1 && minutes >= 40) a.kind = Kind::Movie;
+            else if (total > 1 || !total_s.empty()) a.kind = Kind::TV;
+        }
+
+        std::smatch smatch_;
+        if (std::regex_search(story_html, smatch_, stars_re)) {
+            const double px = std::atof(smatch_[1].str().c_str());
+            if (px > 0) {
+                a.score = std::min(10.0, px / 25.0);
+                if (a.rating.empty()) {
+                    char buf[16];
+                    std::snprintf(buf, sizeof buf, "%.1f", a.score);
+                    a.rating = buf;
+                }
+            }
         }
 
         // Genres
@@ -567,6 +605,21 @@ Stream AniTubeProvider::get_stream(const Anime& /*anime*/, const Episode& episod
     stream.qualities.push_back(std::move(fallback));
 
     return stream;
+}
+
+std::vector<Anime> AniTubeProvider::browse(const std::string& query, int limit, const CatalogFilter& filter, int page) {
+    const bool single_year = filter.year_from > 0 && filter.year_from == filter.year_to;
+    if (query.empty() && filter.genres.empty() && single_year) {
+        std::string url = base_url + "/xfsearch/year/" + std::to_string(filter.year_from) + "/";
+        if (page > 1) url += "page/" + std::to_string(page) + "/";
+        auto resp = http::Client::get(url, {{"Referer", base_url + "/"}}, 15, get_anitube_cookie_file());
+        if (!resp.success()) {
+            std::cerr << "[AniTube] Year page error: " << resp.error << " (status " << resp.status_code << ")\n";
+            return {};
+        }
+        return parse_story_list(resp.body, limit);
+    }
+    return search(query, limit, filter.genres.empty() ? std::string() : filter.genres.front(), page);
 }
 
 } // namespace anime

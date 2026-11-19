@@ -5,6 +5,8 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
+#include <cstdlib>
 
 namespace anime {
 
@@ -23,6 +25,12 @@ static std::string dreamcast_url_encode(const std::string& value) {
 }
 
 std::vector<Anime> DreamCastProvider::search(const std::string& query, int limit, const std::string& genre, int page) {
+    CatalogFilter f;
+    if (!genre.empty()) f.genres.push_back(genre);
+    return browse(query, limit, f, page);
+}
+
+std::vector<Anime> DreamCastProvider::browse(const std::string& query, int limit, const CatalogFilter& filter, int page) {
     std::string url;
     size_t target_skip = (page > 1) ? static_cast<size_t>((page - 1) * limit) : 0;
     size_t batches_to_skip = target_skip / 100;
@@ -37,6 +45,47 @@ std::vector<Anime> DreamCastProvider::search(const std::string& query, int limit
               "&translation_id=" + std::to_string(translation_id) +
               "&title=" + dreamcast_url_encode(query) +
               "&types=anime-serial,anime&with_material_data=true&limit=100";
+    }
+
+    if (filter.has_years()) {
+        // Kodik takes a comma-separated list of years, not a range
+        const int from = filter.year_from > 0 ? filter.year_from : 1960;
+        const int to = filter.year_to > 0 ? filter.year_to : 2100;
+        std::string years;
+        for (int y = from; y <= std::min(to, from + 80); ++y) years += (years.empty() ? "" : ",") + std::to_string(y);
+        url += "&year=" + years;
+    }
+    std::string kinds;
+    for (Kind k : filter.kinds) {
+        const char* v = nullptr;
+        switch (k) {
+        case Kind::TV: v = "tv,tv_13,tv_24,tv_48"; break;
+        case Kind::Movie: v = "movie"; break;
+        case Kind::OVA: v = "ova"; break;
+        case Kind::ONA: v = "ona"; break;
+        case Kind::Special: v = "special,tv_special"; break;
+        default: break;
+        }
+        if (v) kinds += (kinds.empty() ? "" : ",") + std::string(v);
+    }
+    if (!kinds.empty()) url += "&anime_kind=" + kinds;
+    if (filter.airing == Airing::Ongoing) url += "&anime_status=ongoing";
+    else if (filter.airing == Airing::Finished) url += "&anime_status=released";
+    else if (filter.airing == Airing::Announced) url += "&anime_status=anons";
+    if (filter.max_age > 0) {
+        std::string mpaa;
+        const std::pair<int, const char*> scale[] = {{0, "G"}, {6, "PG"}, {12, "PG-13"}, {16, "R"}, {18, "R%2B"}, {18, "Rx"}};
+        for (const auto& [age, v] : scale) {
+            if (age <= filter.max_age) mpaa += (mpaa.empty() ? "" : ",") + std::string(v);
+        }
+        url += "&rating_mpaa=" + mpaa;
+    }
+    switch (filter.sort) {
+    case SortOrder::Updated: url += "&sort=updated_at&order=desc"; break;
+    case SortOrder::Rating: url += "&sort=shikimori_rating&order=desc"; break;
+    case SortOrder::YearDesc: url += "&sort=year&order=desc"; break;
+    case SortOrder::YearAsc: url += "&sort=year&order=asc"; break;
+    default: break;
     }
 
     std::map<std::string, std::string> headers = {
@@ -65,7 +114,6 @@ std::vector<Anime> DreamCastProvider::search(const std::string& query, int limit
     if (!results_val.is_array()) return {};
 
     std::vector<Anime> results;
-    std::string lower_genre = utils::utf8_tolower(genre);
     size_t skip_count = in_batch_skip;
     size_t matched_count = 0;
 
@@ -98,7 +146,14 @@ std::vector<Anime> DreamCastProvider::search(const std::string& query, int limit
                 a.poster_url = poster;
             }
 
+            a.kind = parse_kind(md["anime_kind"].get_str());
+            a.airing = parse_airing(md["anime_status"].get_str());
+            a.age = parse_age(md["rating_mpaa"].get_str());
+            const std::string aired = md["aired_at"].get_str(); // "2026-10-04"
+            if (aired.size() >= 7) a.season = season_from_month(std::atoi(aired.substr(5, 2).c_str()));
+
             auto rate_val = md["shikimori_rating"];
+            if (rate_val.is_number() && rate_val.get_double() > 0) a.score = rate_val.get_double();
             if (rate_val.is_number()) {
                 std::ostringstream ss;
                 ss << std::fixed << std::setprecision(1) << rate_val.get_double();
@@ -109,23 +164,10 @@ std::vector<Anime> DreamCastProvider::search(const std::string& query, int limit
 
             auto g_arr = md["anime_genres"];
             if (!g_arr.is_array() || g_arr.size() == 0) g_arr = md["all_genres"];
-            bool matches_genre = genre.empty();
-
-            if (g_arr.is_array()) {
-                for (size_t g = 0; g < g_arr.size(); ++g) {
-                    std::string gn = g_arr[g].get_str();
-                    if (!gn.empty()) {
-                        a.genres.push_back(gn);
-                        if (!matches_genre && utils::utf8_tolower(gn).find(lower_genre) != std::string::npos) {
-                            matches_genre = true;
-                        }
-                    }
-                }
+            for (size_t g = 0; g < g_arr.size(); ++g) {
+                std::string gn = g_arr[g].get_str();
+                if (!gn.empty()) a.genres.push_back(gn);
             }
-
-            if (!matches_genre) continue;
-        } else if (!genre.empty()) {
-            continue;
         }
 
         matched_count++;

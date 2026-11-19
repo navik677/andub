@@ -1,6 +1,7 @@
 #include "anidub_provider.hpp"
 #include "../utils/http_client.hpp"
 #include "../utils/str_utils.hpp"
+#include <cstdlib>
 #include <iostream>
 #include <regex>
 #include <sstream>
@@ -44,7 +45,11 @@ std::vector<Anime> AniDubProvider::search(const std::string& query, int limit, c
     std::vector<Anime> results;
 
     // Matches <a class="th-in" href="LINK">...<img ... src="POSTER"...>...<div class="th-title">TITLE</div>
-    std::regex item_re(R"raw(<a\s+class="th-in"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<div\s+class="th-title">([^<]+)</div>)raw");
+    // ...followed by <div class="th-subtitle"><span><a ...year/2010/">2010</a> • </span><span>Аниме Фильмы</span></div>
+    std::regex item_re(R"raw(<a\s+class="th-in"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<div\s+class="th-title[^"]*">([^<]+)</div>(?:\s*<div\s+class="th-subtitle[^"]*">([\s\S]*?)</div>)?)raw");
+    std::regex score_re(R"raw(<div\s+class="th-rating"[^>]*>\s*([\d.,]+)\s*<)raw");
+    std::regex year_re(R"raw(year/(\d{4}))raw");
+    std::regex category_re(R"raw(<span>([^<]+)</span>\s*$)raw");
     auto words_begin = std::sregex_iterator(resp.body.begin(), resp.body.end(), item_re);
     auto words_end = std::sregex_iterator();
 
@@ -83,6 +88,27 @@ std::vector<Anime> AniDubProvider::search(const std::string& query, int limit, c
         // Trim title strings
         a.title_ru = utils::trim(a.title_ru);
         a.title_en = utils::trim(a.title_en);
+
+        std::smatch m;
+        if (std::regex_search(inner_html, m, score_re)) {
+            a.rating = m[1].str();
+            a.score = parse_score(a.rating);
+        }
+        const std::string subtitle = match[4].matched ? match[4].str() : std::string();
+        if (std::regex_search(subtitle, m, year_re)) a.year = std::atoi(m[1].str().c_str());
+        // Category: "Аниме Ongoing", "Аниме TV", "Аниме Фильмы", "Аниме OVA", "Дорамы"
+        if (std::regex_search(subtitle, m, category_re)) {
+            const std::string cat = utils::trim(m[1].str());
+            a.status = cat;
+            if (cat.find("Ongoing") != std::string::npos) {
+                a.kind = Kind::TV;
+                a.airing = Airing::Ongoing;
+            } else {
+                a.kind = parse_kind(cat);
+                // Finished titles move out of the "Ongoing" category
+                if (a.kind != Kind::Unknown) a.airing = Airing::Finished;
+            }
+        }
 
         results.push_back(std::move(a));
         if (static_cast<int>(results.size()) >= limit) break;

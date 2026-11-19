@@ -189,7 +189,7 @@ QVariantMap Catalog::support() const {
         {"sortUpdated", server.sort ? 2 : 0},
         {"sortRating", filter_state(server.sort, meta.score)},
         {"sortYear", filter_state(server.sort, meta.year)},
-        {"sortTitle", filter_state(server.sort, true)},
+        {"sortTitle", 1},
         {"years", filter_state(server.years, meta.year)},
         {"season", filter_state(server.season, meta.season)},
         {"kinds", filter_state(server.kinds, meta.kind)},
@@ -339,8 +339,10 @@ void Catalog::fetch(int page) {
                 ++fresh;
                 if (!client_filtering || matches(a, filter, server, meta)) r.items.push_back(std::move(a));
             }
-            // A short page, or a provider that ignores the page number
-            if (static_cast<int>(batch.size()) < PAGE_SIZE || fresh == 0) {
+            // An empty page, or one with nothing new (a provider that ignores the
+            // page number). Page sizes differ between sites (AniTube: 11), so a
+            // short page is not taken as the last one.
+            if (batch.empty() || fresh == 0) {
                 r.exhausted = true;
                 break;
             }
@@ -351,7 +353,9 @@ void Catalog::fetch(int page) {
         if (seq != seq_) return; // superseded by a newer request
         loading_ = false;
         loading_more_ = false;
-        const bool client_sort = filter.sort != SortOrder::Default && !server.sort;
+        // Sorting by title is always local: no source sorts Cyrillic names reliably
+        const bool client_sort = filter.sort != SortOrder::Default &&
+                                 (!server.sort || filter.sort == SortOrder::Title);
         if (page == 1) {
             if (client_sort) sort_items(r.items, filter.sort);
             results_.reset(std::move(r.items));

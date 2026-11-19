@@ -90,12 +90,8 @@ std::vector<Anime> AniStarProvider::search(const std::string& query, int limit, 
     std::string html = utils::cp1251_to_utf8(raw_html);
 
     std::vector<Anime> results;
-    std::regex item_re(R"raw(<div\s+class="news"[\s\S]*?(?=<div\s+class="news"|<div\s+class="pagenav"|$))raw");
-    auto it = std::sregex_iterator(html.begin(), html.end(), item_re);
-    auto end = std::sregex_iterator();
-
-    for (; it != end && (int)results.size() < limit; ++it) {
-        std::string block = it->str();
+    for (const std::string& block : utils::split_blocks(html, "<div class=\"news\"", {"<div class=\"pagenav\""})) {
+        if ((int)results.size() >= limit) break;
 
         std::regex title_re(R"raw(<div\s+class="title_left"><a\s+href="([^"]+)"[^>]*>([\s\S]*?)</a>)raw");
         std::smatch tm;
@@ -159,6 +155,8 @@ std::vector<Anime> AniStarProvider::search(const std::string& query, int limit, 
         std::smatch rm;
         if (std::regex_search(block, rm, rat_re)) {
             a.rating = rm[1].str();
+            a.score = parse_score(a.rating);
+            if (a.score < 0) a.rating.clear(); // "0" = no votes yet
         }
 
         // Status / Episodes
@@ -197,6 +195,16 @@ std::vector<Anime> AniStarProvider::search(const std::string& query, int limit, 
         for (const auto& g : genres_set) {
             a.genres.push_back(g);
         }
+
+        // "полнометражный фильм, 73 мин.", "ТВ (>12 эп.), 25 мин.", "OVA (2 эп.)", "(16 эп.)"
+        {
+            const std::string eps = utils::utf8_tolower(a.status);
+            a.kind = parse_kind(eps);
+            if (a.kind == Kind::Unknown && eps.find("эп.") != std::string::npos) a.kind = Kind::TV;
+        }
+        // Airing titles sit in the "Новинки(онгоинги)" category
+        a.airing = genres_set.count("Новинки(онгоинги)") ? Airing::Ongoing : Airing::Finished;
+        a.genres.erase(std::remove(a.genres.begin(), a.genres.end(), std::string("Новинки(онгоинги)")), a.genres.end());
 
         // If filtering by genre, ensure item matches
         if (!genre.empty() && genre != "Все жанры") {

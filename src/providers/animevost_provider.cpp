@@ -2,6 +2,7 @@
 #include "../utils/http_client.hpp"
 #include "../utils/json.hpp"
 #include <iostream>
+#include <algorithm>
 #include <regex>
 #include "../utils/str_utils.hpp"
 
@@ -150,8 +151,24 @@ Anime AnimeVostProvider::parse_anime_item(const json::Value& item) {
         }
     }
 
+    a.kind = parse_kind(item["type"].get_str());
+    // "Title / Original [1-3 из 12]", "[1 из 12+]", "[Анонс]"
+    {
+        static const std::regex eps_re(R"(\[(\d+)(?:-(\d+))?\s+из\s+(\d+)(\+?)\])");
+        std::smatch m;
+        if (raw_title.find("[Анонс]") != std::string::npos) {
+            a.airing = Airing::Announced;
+        } else if (std::regex_search(raw_title, m, eps_re)) {
+            const int aired = std::stoi(m[2].matched ? m[2].str() : m[1].str());
+            const int total = std::stoi(m[3].str());
+            a.airing = m[4].length() ? Airing::Ongoing : airing_from_episode_counts(aired, total);
+        }
+    }
+
     int rating = item["rating"].get_int();
     int votes = item["votes"].get_int();
+    // rating is the sum of 1..5 votes
+    if (rating > 0 && votes > 0) a.score = std::min(10.0, 2.0 * rating / votes);
     if (rating > 0) {
         a.rating = "★ " + std::to_string(rating);
     } else if (votes > 0) {

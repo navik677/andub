@@ -65,6 +65,12 @@ static const std::unordered_map<std::string, int>& get_anilibria_genre_map() {
 }
 
 std::vector<Anime> AnilibriaProvider::search(const std::string& query, int limit, const std::string& genre, int page) {
+    CatalogFilter f;
+    if (!genre.empty()) f.genres.push_back(genre);
+    return browse(query, limit, f, page);
+}
+
+std::vector<Anime> AnilibriaProvider::browse(const std::string& query, int limit, const CatalogFilter& filter, int page) {
     int effective_limit = std::clamp(limit, 1, 30);
     int effective_page = std::max(1, page);
 
@@ -75,13 +81,59 @@ std::vector<Anime> AnilibriaProvider::search(const std::string& query, int limit
         url += "&f[search]=" + url_encode(query);
     }
 
-    if (!genre.empty()) {
-        std::string lower_g = utils::utf8_tolower(genre);
-        const auto& gmap = get_anilibria_genre_map();
-        auto it = gmap.find(lower_g);
-        if (it != gmap.end()) {
-            url += "&f[genres][0]=" + std::to_string(it->second);
+    // Several genres: comma-separated ids, the API keeps titles having all of them
+    std::string genre_ids;
+    const auto& gmap = get_anilibria_genre_map();
+    for (const auto& g : filter.genres) {
+        auto it = gmap.find(utils::utf8_tolower(g));
+        if (it == gmap.end()) return {}; // a genre AniLibria doesn't have: nothing can match
+        if (!genre_ids.empty()) genre_ids += ",";
+        genre_ids += std::to_string(it->second);
+    }
+    if (!genre_ids.empty()) url += "&f[genres]=" + genre_ids;
+
+    switch (filter.sort) {
+    case SortOrder::Updated: url += "&f[sorting]=FRESH_AT_DESC"; break;
+    case SortOrder::Rating: url += "&f[sorting]=RATING_DESC"; break;
+    case SortOrder::YearDesc: url += "&f[sorting]=YEAR_DESC"; break;
+    case SortOrder::YearAsc: url += "&f[sorting]=YEAR_ASC"; break;
+    default: break; // Title: not offered by the API, sorted on the client
+    }
+
+    if (filter.year_from > 0) url += "&f[years][from_year]=" + std::to_string(filter.year_from);
+    if (filter.year_to > 0) url += "&f[years][to_year]=" + std::to_string(filter.year_to);
+
+    static const char* seasons[] = {"", "winter", "spring", "summer", "autumn"};
+    if (filter.season != Season::Unknown) url += std::string("&f[seasons]=") + seasons[static_cast<int>(filter.season)];
+
+    std::string types;
+    for (Kind k : filter.kinds) {
+        const char* v = nullptr;
+        switch (k) {
+        case Kind::TV: v = "TV"; break;
+        case Kind::Movie: v = "MOVIE"; break;
+        case Kind::OVA: v = "OVA,OAD"; break;
+        case Kind::ONA: v = "ONA,WEB"; break;
+        case Kind::Special: v = "SPECIAL"; break;
+        default: break;
         }
+        if (!v) continue;
+        if (!types.empty()) types += ",";
+        types += v;
+    }
+    if (!types.empty()) url += "&f[types]=" + types;
+
+    if (filter.airing == Airing::Ongoing) url += "&f[publish_statuses]=IS_ONGOING";
+    else if (filter.airing == Airing::Finished) url += "&f[publish_statuses]=IS_NOT_ONGOING";
+
+    if (filter.max_age > 0) {
+        std::string ages;
+        for (int age : {0, 6, 12, 16, 18}) {
+            if (age > filter.max_age) break;
+            if (!ages.empty()) ages += ",";
+            ages += "R" + std::to_string(age) + "_PLUS";
+        }
+        url += "&f[age_ratings]=" + ages;
     }
 
     auto resp = http::Client::get(url);
@@ -184,6 +236,9 @@ Anime AnilibriaProvider::parse_anime_item(const json::Value& item) {
     a.year = item["year"].get_int();
     a.description = item["description"].get_str();
     a.status = item["type"]["description"].get_str();
+    a.kind = parse_kind(item["type"]["value"].get_str());
+    a.airing = item["is_ongoing"].get_bool() ? Airing::Ongoing : Airing::Finished;
+    a.season = parse_season(item["season"]["value"].get_str());
     a.provider = this->name();
 
     auto genres_val = item["genres"];
@@ -197,6 +252,7 @@ Anime AnilibriaProvider::parse_anime_item(const json::Value& item) {
     auto ar_val = item["age_rating"];
     if (ar_val.is_object()) {
         a.age_rating = ar_val["label"].get_str();
+        a.age = parse_age(ar_val["value"].get_str());
     }
 
     int favs = item["added_in_users_favorites"].get_int();
