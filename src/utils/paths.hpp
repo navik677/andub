@@ -7,10 +7,8 @@
 
 namespace anime::paths {
 
-// Per-user directories shared by all services. On Linux these resolve to the
-// same locations the GTK build used (~/.config/anime-gui, ~/.cache/anime-gui),
-// so favorites, history and settings carry over. On Windows/macOS they land in
-// the platform's standard app-data folders.
+// Per-user directories shared by all services: settings, favorites and history
+// in %LOCALAPPDATA%\anime-gui, poster cache in %LOCALAPPDATA%\cache\anime-gui.
 namespace detail {
 inline std::string ensure(const QString& base, const char* sub) {
     std::filesystem::path dir = std::filesystem::path(base.toStdString()) / sub;

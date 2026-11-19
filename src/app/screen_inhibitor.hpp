@@ -4,8 +4,7 @@
 
 namespace anime::app {
 
-// Keeps the display awake during playback (freedesktop ScreenSaver on Linux,
-// SetThreadExecutionState on Windows).
+// Keeps the display and the system awake during playback (SetThreadExecutionState).
 class ScreenInhibitor : public QObject {
     Q_OBJECT
 public:
@@ -15,8 +14,6 @@ public:
 
 private:
     bool active_ = false;
-    quint32 cookie_ = 0;
-    bool pending_ = false;
 };
 
 } // namespace anime::app

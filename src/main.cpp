@@ -9,20 +9,11 @@
 #include <QTimer>
 #include <clocale>
 
-#ifdef HAVE_LIBCURL
-#include <curl/curl.h>
-#endif
-
 #include "app/poster_provider.hpp"
 
 int main(int argc, char* argv[]) {
-#ifdef HAVE_LIBCURL
-    // Must happen before any worker thread touches curl
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-#endif
-
     // The embedded player renders through mpv's OpenGL API, so the scene graph
-    // has to use OpenGL on every platform (Qt would pick D3D11/Metal otherwise).
+    // has to use OpenGL (Qt would pick Direct3D 11 on Windows otherwise).
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
@@ -30,7 +21,6 @@ int main(int argc, char* argv[]) {
     QGuiApplication::setApplicationName(QStringLiteral("Andub"));
     QGuiApplication::setApplicationVersion(QStringLiteral(ANDUB_VERSION));
     QGuiApplication::setOrganizationName(QStringLiteral("Andub"));
-    QGuiApplication::setDesktopFileName(QStringLiteral("andub"));
     QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Andub/resources/andub.svg")));
     std::setlocale(LC_NUMERIC, "C");
 

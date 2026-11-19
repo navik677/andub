@@ -1,4 +1,5 @@
 #include "download_service.hpp"
+#include "../utils/external_tools.hpp"
 #include <filesystem>
 #include <functional>
 #include <thread>
@@ -88,7 +89,8 @@ void DownloadService::start_download(const Anime& anime, const Episode& episode,
 
         QProcess proc;
         proc.setProcessChannelMode(QProcess::MergedChannels);
-        proc.start(QStringLiteral("yt-dlp"), args);
+        tools::hide_console(proc);
+        proc.start(tools::find(QStringLiteral("yt-dlp")), args);
         if (!proc.waitForStarted(10000)) {
             update(job.id, [](DownloadJob& j) {
                 j.is_active = false;

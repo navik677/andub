@@ -2,6 +2,7 @@
 #include "../utils/json.hpp"
 #include "../utils/paths.hpp"
 #include "../utils/str_utils.hpp"
+#include "../utils/external_tools.hpp"
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -148,7 +149,7 @@ bool PlayerService::play_external(const Quality& quality, const std::string& ani
     args << QString::fromStdString(stream_url);
 
     // Arguments go straight to the process (no shell), so URLs and titles need no escaping.
-    bool ok = QProcess::startDetached(QStringLiteral("mpv"), args);
+    bool ok = QProcess::startDetached(tools::find(QStringLiteral("mpv")), args);
     if (!ok) std::cerr << "[PlayerService] failed to start mpv\n";
     return ok;
 }

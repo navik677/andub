@@ -57,16 +57,7 @@ const std::string& Upscaler::shader_dir() {
         if (const char* env = std::getenv("ANDUB_SHADER_DIR"); env && *env) candidates.emplace_back(env);
 
         fs::path exe = executable_dir();
-        if (!exe.empty()) {
-            candidates.push_back(exe / ".." / "share" / "andub" / "shaders"); // CMake install, AppImage
-            candidates.push_back(exe / "resources" / "shaders");              // Windows bundle
-            candidates.push_back(exe / ".." / "Resources" / "shaders");       // macOS .app bundle
-        }
-
-        const char* xdg = std::getenv("XDG_DATA_HOME");
-        const char* home = std::getenv("HOME");
-        if (xdg && *xdg) candidates.push_back(fs::path(xdg) / "andub" / "shaders");
-        else if (home && *home) candidates.push_back(fs::path(home) / ".local" / "share" / "andub" / "shaders");
+        if (!exe.empty()) candidates.push_back(exe / "resources" / "shaders"); // installed / portable folder
 
 #ifdef ANDUB_SOURCE_SHADER_DIR
         candidates.emplace_back(ANDUB_SOURCE_SHADER_DIR); // running straight from the build dir
