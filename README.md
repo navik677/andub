@@ -1,8 +1,7 @@
 # Andub
 
 Десктопний застосунок для пошуку, перегляду та завантаження аніме з українською та російською озвучкою.
-Ядро написане на **C++20**, інтерфейс на **Qt 6 Quick (QML)**, відео відтворюється через **libmpv**.
-Працює на Linux і Windows. macOS збирається тим самим CMake-проєктом, але поки не перевірявся.
+Версія для **Windows 10/11 (x64)**. Ядро написане на **C++20** (MSVC), інтерфейс на **Qt 6 Quick (QML)**, відео відтворюється через **libmpv**, мережа через вбудований у Windows **WinHTTP**.
 
 ---
 
@@ -19,7 +18,7 @@
   - кнопка «Відкрити в mpv».
 - **GPU-апскейл у реальному часі:** FSR 1.0, FSRCNNX, Anime4K, Anime4K HQ (`Ctrl+U` або меню в плеєрі).
 - **Завантаження** серій через `yt-dlp` у фоні, з прогресом, швидкістю та часом, що залишився.
-- **Улюблені та історія переглядів.** Дані старої GTK-версії підхоплюються автоматично.
+- **Улюблені та історія переглядів.**
 - **Оформлення:** темна, OLED або світла тема та 5 акцентних кольорів.
 
 ## Клавіші плеєра
@@ -38,55 +37,44 @@
 
 ---
 
-## Встановлення з вихідного коду (Linux)
+## Встановлення
 
-```bash
-./install.sh      # встановлює залежності, збирає та ставить у ~/.local
-./uninstall.sh    # видалення (улюблені та історія залишаються)
+Завантажте `Andub-Setup-x86_64.exe` з [релізів](https://github.com/navik677/andub/releases) і запустіть.
+Інсталятор ставить програму в `%LOCALAPPDATA%\Programs\Andub` без прав адміністратора, створює ярлики й
+пункт у «Програми та компоненти». У «Параметрах» інсталятора можна вибрати іншу теку. Тихе встановлення:
+`Andub-Setup-x86_64.exe /quiet` (`DESKTOP_SHORTCUT=0` пропускає ярлик на робочому столі, `INSTALLFOLDER="..."` задає теку).
+
+Якщо стоїть стара версія з NSIS-інсталятора (1.x або 2.0), інсталятор попросить спершу видалити її
+в «Параметри → Програми». Улюблені, історія й налаштування при цьому залишаться.
+
+Є й портативна версія `Andub-Windows-x86_64.zip`: розпакуйте й запустіть `andub.exe`.
+
+Усе потрібне вже в комплекті: Qt, libmpv, `mpv.exe` для зовнішнього плеєра, `yt-dlp.exe` для завантажень
+і runtime MSVC. Окремо нічого ставити не треба.
+
+## Збірка з вихідного коду
+
+Потрібні:
+- **Visual Studio 2022** або **Build Tools for Visual Studio 2022** з робочим навантаженням «Desktop development with C++»;
+- **Qt 6.6+** для `msvc2022_64` з модулем `qtimageformats`;
+- **CMake 3.21+**. WiX Toolset для інсталятора скрипт завантажує сам.
+
+```powershell
+winget install Microsoft.VisualStudio.2022.BuildTools Kitware.CMake
+pip install aqtinstall
+python -m aqt install-qt windows desktop 6.10.3 win64_msvc2022_64 -m qtimageformats -O $HOME\Qt
+.\scripts\build_windows.ps1
 ```
 
-### Залежності
+Скрипт сам знаходить Visual Studio і Qt у `%USERPROFILE%\Qt` (або візьміть `-QtDir`), а `scripts/fetch_deps.ps1`
+завантажує в `third_party\` готовий libmpv і `mpv.exe` ([shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake)),
+а також `yt-dlp.exe` і WiX Toolset 6. Що виходить у `dist\`:
+- `Andub\`: готова тека з програмою;
+- `Andub-Windows-x86_64.zip`: портативна версія;
+- `Andub-Setup-x86_64.exe`: інсталятор одним файлом. Це WiX-бандл, усередині якого MSI-пакет (`installer/Package.wxs`, `installer/Bundle.wxs`).
 
-Потрібні Qt **6.6 або новіший**, CMake, libmpv та libcurl. `mpv` і `yt-dlp` потрібні для зовнішнього плеєра та завантажень.
-
-**Fedora**
-```bash
-sudo dnf install gcc-c++ cmake ninja-build qt6-qtbase-devel qt6-qtdeclarative-devel \
-    qt6-qtsvg qt6-qtimageformats mpv-devel libcurl-devel mpv yt-dlp
-```
-
-**Arch Linux**
-```bash
-sudo pacman -S base-devel cmake ninja qt6-base qt6-declarative qt6-svg qt6-imageformats mpv curl yt-dlp
-```
-
-**Ubuntu 25.04+ / Debian 13+**
-```bash
-sudo apt install build-essential cmake ninja-build qt6-base-dev qt6-declarative-dev \
-    qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates \
-    qml6-module-qtquick-layouts qml6-module-qtquick-effects qml6-module-qtquick-shapes \
-    qml6-module-qtqml-workerscript qt6-image-formats-plugins libqt6svg6 \
-    libmpv-dev libcurl4-openssl-dev mpv yt-dlp
-```
-Ubuntu 24.04 має Qt 6.4, цього замало. Там використовуйте AppImage.
-
-### Ручна збірка
-
-```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-./build/andub
-```
-
-`-DANDUB_BUILD_TESTS=ON` додає тестові програми (`test_core`, `test_providers`, ...).
-
-## Пакунки
-
-- **Linux AppImage:** `./scripts/build_appimage.sh` (використовує linuxdeploy і його Qt-плагін).
-- **Windows:** `./scripts/build_windows.sh` в оболонці MSYS2 UCRT64 (список пакетів pacman є на початку скрипта). На виході:
-  - `Andub-Setup-x86_64.exe`: інсталятор одним файлом (NSIS, `installer/andub.nsi`). Ставить у `%LOCALAPPDATA%\Programs\Andub` без прав адміністратора, з ярликами й деінсталятором;
-  - `Andub-Windows-x86_64.zip`: портативна версія.
-- **CI:** `.github/workflows/build-release.yml` збирає обидва варіанти та публікує реліз для тегів `v*`.
+`-Tests` додає тестові програми (`test_core`, `test_providers`, ...), `-NoInstaller` пропускає інсталятор.
+CI (`.github/workflows/build-release.yml`) робить те саме на `windows-2022` і публікує реліз для тегів `v*`.
 
 ---
 
@@ -102,7 +90,7 @@ andub/
 │   ├── models/             # Anime, Episode, Stream
 │   ├── providers/          # джерела озвучки
 │   ├── services/           # кеш постерів, історія, улюблені, завантаження, апскейлер
-│   └── utils/              # HTTP (libcurl), JSON, Kodik, шляхи, рядки
+│   └── utils/              # HTTP (WinHTTP), JSON, Kodik, шляхи, рядки, mpv/yt-dlp
 ├── qml/
 │   ├── Main.qml            # вікно, навігація, плеєр поверх усього
 │   ├── Theme.qml           # дизайн-токени: кольори, радіуси, шрифти, анімації
@@ -112,11 +100,12 @@ andub/
 │   ├── fonts/              # Manrope (OFL)
 │   ├── icons/              # Phosphor Icons (MIT)
 │   └── shaders/            # шейдери апскейлу
-├── desktop/                # .desktop-файл
-└── scripts/                # AppImage, Windows, MSI
+├── installer/              # MSI (WiX) і бандл Setup.exe
+├── scripts/                # build_windows.ps1, fetch_deps.ps1
+└── third_party/            # libmpv, mpv.exe, yt-dlp.exe (завантажуються, не в git)
 ```
 
-Налаштування, улюблені та історія зберігаються в `~/.config/anime-gui/` (на Windows у `%LOCALAPPDATA%\anime-gui`), кеш постерів у `~/.cache/anime-gui/`.
+Налаштування, улюблені та історія зберігаються в `%LOCALAPPDATA%\anime-gui`, кеш постерів у `%LOCALAPPDATA%\cache\anime-gui`. Серії завантажуються в `Завантаження\Anime`.
 
 ---
 
