@@ -1,70 +1,39 @@
-name: Build & Release Andub
+name: Build & Release Andub (Windows)
 
 on:
   push:
-    branches: [ "main", "ui-qt" ]
+    branches: [ "windows-port" ]
     tags: [ "v*" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "windows-port" ]
   workflow_dispatch:
 
 jobs:
-  build-linux-appimage:
-    name: Linux AppImage
-    runs-on: ubuntu-24.04
+  build-windows:
+    name: Windows (MSVC)
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Qt 6.8
+      - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.3"
+          version: "6.10.3"
+          arch: "win64_msvc2022_64"
           modules: "qtimageformats"
           cache: true
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build libmpv-dev libcurl4-openssl-dev libfuse2 \
-            libxkbcommon-x11-0 libxcb-cursor0
-
-      - name: Build AppImage
-        run: ./scripts/build_appimage.sh
-
-      - uses: actions/upload-artifact@v4
+      - name: Cache third-party binaries
+        uses: actions/cache@v4
         with:
-          name: Andub-Linux-AppImage
-          path: dist/Andub-x86_64.AppImage
+          path: third_party
+          key: third-party-${{ hashFiles('scripts/fetch_deps.ps1') }}
 
-  build-windows:
-    name: Windows
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: zip
-          pacboy: >-
-            gcc:p
-            cmake:p
-            ninja:p
-            pkgconf:p
-            qt6-base:p
-            qt6-declarative:p
-            qt6-svg:p
-            qt6-imageformats:p
-            mpv:p
-            curl:p
-            nsis:p
-
-      - name: Build app and installer
-        run: ./scripts/build_windows.sh
+      - name: Build app, portable zip and installer
+        run: ./scripts/build_windows.ps1
 
       - uses: actions/upload-artifact@v4
         with:
@@ -78,7 +47,7 @@ jobs:
 
   release:
     name: Publish Release
-    needs: [build-linux-appimage, build-windows]
+    needs: [build-windows]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
@@ -88,6 +57,5 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            Andub-Linux-AppImage/Andub-x86_64.AppImage
             Andub-Windows-Setup/Andub-Setup-x86_64.exe
             Andub-Windows-Portable/Andub-Windows-x86_64.zip

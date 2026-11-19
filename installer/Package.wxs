@@ -1,0 +1,74 @@
+<!--
+  Andub MSI (per-user, no UAC). Built by scripts/build_windows.ps1:
+    wix build -arch x64 -d Version=2.0.0 -bindpath Bundle=dist\Andub -ext WixToolset.Util.wixext
+              installer\Package.wxs -o dist\Andub-x86_64.msi
+  The MSI is then embedded into the one-file Setup.exe (Bundle.wxs).
+
+  Installs into %LOCALAPPDATA%\Programs\Andub (per-user ProgramFiles), adds Start
+  menu and desktop shortcuts. User data in %LOCALAPPDATA%\anime-gui is not touched
+  on uninstall. Upgrades remove the previous version first, so stale Qt/mpv DLLs
+  from older releases never stay behind.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Andub"
+           Manufacturer="navik677"
+           Version="$(Version)"
+           UpgradeCode="5E0C6A7B-3F1D-4B8E-9A52-6D7C2E41B0F3"
+           Scope="perUser"
+           Language="1058"
+           Codepage="1251"
+           Compressed="yes">
+
+    <MajorUpgrade Schedule="afterInstallInitialize"
+                  DowngradeErrorMessage="Уже встановлено новішу версію Andub." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AndubIcon" SourceFile="$(sys.SOURCEFILEDIR)..\resources\andub.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AndubIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/navik677/andub" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <!-- 1 = create the desktop shortcut (the bundle passes its own choice) -->
+    <Property Id="DESKTOP_SHORTCUT" Value="1" />
+
+    <!-- per-user ProgramFiles = %LOCALAPPDATA%\Programs -->
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="Andub" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Andub" AllowAbsent="no">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+      <ComponentRef Id="InstallDirRegistry" />
+    </Feature>
+
+    <!-- Everything windeployqt put into the bundle folder -->
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="!(bindpath.Bundle)\**" />
+    </ComponentGroup>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut">
+        <Shortcut Id="StartMenuAndub" Name="Andub" Description="Аніме з українською та російською озвучкою"
+                  Target="[INSTALLFOLDER]andub.exe" WorkingDirectory="INSTALLFOLDER" Icon="AndubIcon" />
+        <RegistryValue Root="HKCU" Key="Software\Andub" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Condition="DESKTOP_SHORTCUT = 1">
+        <Shortcut Id="DesktopAndub" Name="Andub" Target="[INSTALLFOLDER]andub.exe"
+                  WorkingDirectory="INSTALLFOLDER" Icon="AndubIcon" />
+        <RegistryValue Root="HKCU" Key="Software\Andub" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <!-- Remembered for the next upgrade; removed on uninstall -->
+    <Component Id="InstallDirRegistry" Directory="INSTALLFOLDER">
+      <RegistryValue Root="HKCU" Key="Software\Andub" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+      <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+    </Component>
+  </Package>
+</Wix>

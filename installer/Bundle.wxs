@@ -1,0 +1,59 @@
+<!--
+  One-file installer: a WiX Burn bundle with the Andub MSI embedded.
+    wix build -arch x64 -d Version=2.0.0 -d MsiPath=dist\Andub-x86_64.msi
+              -ext WixToolset.BootstrapperApplications.wixext -ext WixToolset.Util.wixext
+              -loc installer\Bundle.uk-ua.wxl installer\Bundle.wxs -o dist\Andub-Setup-x86_64.exe
+
+  Per-user (no UAC). The bundle owns the single "Apps & features" entry; the MSI
+  inside it is hidden there. Silent install: Andub-Setup-x86_64.exe /quiet
+  (DESKTOP_SHORTCUT=0 skips the desktop shortcut, INSTALLFOLDER=... changes the folder).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Bundle Name="Andub"
+          Manufacturer="navik677"
+          Version="$(Version)"
+          UpgradeCode="A3B1E9C4-7D2F-4E60-8B15-2F9C0D4A6E71"
+          IconSourceFile="$(sys.SOURCEFILEDIR)..\resources\andub.ico"
+          AboutUrl="https://github.com/navik677/andub"
+          HelpUrl="https://github.com/navik677/andub/issues"
+          DisableModify="yes"
+          Compressed="yes">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="hyperlinkLicense"
+          LicenseUrl=""
+          LocalizationFile="$(sys.SOURCEFILEDIR)Bundle.uk-ua.wxl"
+          LogoFile="$(sys.SOURCEFILEDIR)logo.png"
+          LaunchTarget="[INSTALLFOLDER]andub.exe"
+          LaunchWorkingFolder="[INSTALLFOLDER]"
+          SuppressOptionsUI="no"
+          SuppressRepair="yes" />
+    </BootstrapperApplication>
+
+    <!-- Versions before the MSI (NSIS setup, 1.x and 2.0) register "Andub" under
+         Uninstall and live in the same folder. Installing on top would mix two
+         file sets that the MSI can't fully remove later, so ask for removal first. -->
+    <util:RegistrySearch Id="LegacyNsisInstall" Root="HKCU"
+                         Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\Andub"
+                         Value="UninstallString" Result="exists" Variable="LegacyAndubInstalled" />
+    <bal:Condition Message="Знайдено попередню версію Andub, встановлену старим інсталятором. Видаліть її в «Параметри → Програми» (улюблені та історія залишаться) і запустіть встановлення знову."
+                   Condition="NOT LegacyAndubInstalled" />
+
+    <!-- Shown on the Options page; passed to the MSI -->
+    <Variable Name="INSTALLFOLDER" Type="formatted" bal:Overridable="yes"
+              Value="[LocalAppDataFolder]Programs\Andub" />
+    <Variable Name="DESKTOP_SHORTCUT" Type="numeric" Value="1" bal:Overridable="yes" />
+
+    <Chain>
+      <!-- Cache="remove": no second 100+ MB copy in Package Cache; uninstall doesn't need it
+           and repair is turned off -->
+      <MsiPackage Id="AndubMsi" SourceFile="$(MsiPath)" Vital="yes" Visible="no" Cache="remove">
+        <MsiProperty Name="INSTALLFOLDER" Value="[INSTALLFOLDER]" />
+        <MsiProperty Name="DESKTOP_SHORTCUT" Value="[DESKTOP_SHORTCUT]" />
+      </MsiPackage>
+    </Chain>
+  </Bundle>
+</Wix>

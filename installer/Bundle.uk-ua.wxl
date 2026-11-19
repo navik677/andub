@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ukrainian strings for the WixStdBA "hyperlinkLicense" theme (WiX 6.0.2, HyperlinkTheme.wxl) -->
+<WixLocalization Culture="uk-ua" Language="1058" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="Caption" Value="Встановлення [WixBundleName]" />
+  <String Id="Title" Value="[WixBundleName]" />
+  <String Id="CheckingForUpdatesLabel" Value="Перевірка оновлень" />
+  <String Id="UpdateButton" Value="&amp;Оновити до версії [WixStdBAUpdateAvailable]" />
+  <String Id="InstallHeader" Value="Вітаємо" />
+  <String Id="InstallMessage" Value="Буде встановлено [WixBundleName]. Права адміністратора не потрібні. Натисніть «Встановити», щоб продовжити." />
+  <String Id="InstallMessageOptions" Value="Буде встановлено [WixBundleName]. Права адміністратора не потрібні. Натисніть «Встановити», щоб продовжити, або «Параметри», щоб змінити теку." />
+  <String Id="InstallVersion" Value="Версія [WixBundleVersion]" />
+  <String Id="ConfirmCancelMessage" Value="Скасувати встановлення?" />
+  <String Id="ExecuteUpgradeRelatedBundleMessage" Value="Попередня версія" />
+  <String Id="HelpHeader" Value="Довідка" />
+  <String Id="HelpText" Value="/install | /uninstall | /layout [тека] - встановити, видалити або&#xA;   зберегти повну копію інсталятора в теку. За замовчуванням: встановити.&#xA;&#xA;/passive | /quiet - мінімальний інтерфейс без запитань або зовсім без інтерфейсу.&#xA;&#xA;DESKTOP_SHORTCUT=0     - не створювати ярлик на робочому столі.&#xA;INSTALLFOLDER=&quot;тека&quot; - інша тека встановлення.&#xA;/log log.txt           - записати журнал у файл (за замовчуванням у %TEMP%)." />
+  <String Id="HelpCloseButton" Value="&amp;Закрити" />
+  <String Id="InstallLicenseLinkText" Value="[WixBundleName] &lt;a href=&quot;#&quot;&gt;умови ліцензії&lt;/a&gt;." />
+  <String Id="InstallAcceptCheckbox" Value="Я &amp;приймаю умови ліцензії" />
+  <String Id="InstallOptionsButton" Value="&amp;Параметри" />
+  <String Id="InstallInstallButton" Value="&amp;Встановити" />
+  <String Id="InstallCancelButton" Value="&amp;Скасувати" />
+  <String Id="OptionsHeader" Value="Параметри встановлення" />
+  <String Id="OptionsLocationLabel" Value="Тека встановлення:" />
+  <String Id="OptionsBrowseButton" Value="&amp;Огляд" />
+  <String Id="OptionsOkButton" Value="&amp;OK" />
+  <String Id="OptionsCancelButton" Value="&amp;Скасувати" />
+  <String Id="ProgressHeader" Value="Встановлення" />
+  <String Id="ProgressLabel" Value="Виконується:" />
+  <String Id="OverallProgressPackageText" Value="Підготовка..." />
+  <String Id="ProgressCancelButton" Value="&amp;Скасувати" />
+  <String Id="ModifyHeader" Value="Зміна встановлення" />
+  <String Id="ModifyRepairButton" Value="&amp;Відновити" />
+  <String Id="ModifyUninstallButton" Value="&amp;Видалити" />
+  <String Id="ModifyCancelButton" Value="&amp;Скасувати" />
+  <String Id="SuccessHeader" Value="Готово" />
+  <String Id="SuccessCacheHeader" Value="Кешування завершено" />
+  <String Id="SuccessInstallHeader" Value="Andub встановлено" />
+  <String Id="SuccessLayoutHeader" Value="Копію інсталятора збережено" />
+  <String Id="SuccessModifyHeader" Value="Зміни внесено" />
+  <String Id="SuccessRepairHeader" Value="Відновлення завершено" />
+  <String Id="SuccessUninstallHeader" Value="Andub видалено" />
+  <String Id="SuccessUnsafeUninstallHeader" Value="Andub видалено" />
+  <String Id="SuccessLaunchButton" Value="&amp;Запустити" />
+  <String Id="SuccessRestartText" Value="Щоб користуватися програмою, перезавантажте комп'ютер." />
+  <String Id="SuccessUninstallRestartText" Value="Щоб завершити видалення, перезавантажте комп'ютер." />
+  <String Id="SuccessRestartButton" Value="&amp;Перезавантажити" />
+  <String Id="SuccessCloseButton" Value="&amp;Закрити" />
+  <String Id="FailureHeader" Value="Помилка встановлення" />
+  <String Id="FailureCacheHeader" Value="Помилка кешування" />
+  <String Id="FailureInstallHeader" Value="Помилка встановлення" />
+  <String Id="FailureLayoutHeader" Value="Не вдалося зберегти копію" />
+  <String Id="FailureModifyHeader" Value="Не вдалося внести зміни" />
+  <String Id="FailureRepairHeader" Value="Помилка відновлення" />
+  <String Id="FailureUninstallHeader" Value="Помилка видалення" />
+  <String Id="FailureUnsafeUninstallHeader" Value="Помилка видалення" />
+  <String Id="FailureHyperlinkLogText" Value="Щось пішло не так. Виправте проблему й спробуйте ще раз. Подробиці в &lt;a href=&quot;#&quot;&gt;журналі&lt;/a&gt;." />
+  <String Id="FailureRestartText" Value="Щоб завершити відкат змін, перезавантажте комп'ютер." />
+  <String Id="FailureRestartButton" Value="&amp;Перезавантажити" />
+  <String Id="FailureCloseButton" Value="&amp;Закрити" />
+  <String Id="FilesInUseTitle" Value="Файли використовуються" />
+  <String Id="FilesInUseLabel" Value="Ці програми використовують файли, які треба оновити:" />
+  <String Id="FilesInUseNetfxCloseRadioButton" Value="Закрити &amp;програми." />
+  <String Id="FilesInUseCloseRadioButton" Value="Закрити &amp;програми й потім запустити знову." />
+  <String Id="FilesInUseDontCloseRadioButton" Value="&amp;Не закривати. Знадобиться перезавантаження." />
+  <String Id="FilesInUseRetryButton" Value="&amp;Повторити" />
+  <String Id="FilesInUseIgnoreButton" Value="&amp;Ігнорувати" />
+  <String Id="FilesInUseExitButton" Value="&amp;Вийти" />
+</WixLocalization>
