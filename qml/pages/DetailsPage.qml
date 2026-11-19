@@ -203,6 +203,18 @@ Item {
                             }
                             onClicked: page.startEpisode(page.resume)
                         }
+                        // Watch the title again from episode 1: drops "Переглянуто" and saved positions
+                        AppButton {
+                            visible: page.details.hasProgress && page.episodeCount > 0
+                            implicitHeight: 44
+                            iconName: "arrow-counter-clockwise"
+                            text: page.narrow ? "" : "Переглянути знову"
+                            tip: page.narrow ? "Переглянути знову з 1 серії" : "Скинути позначки «Переглянуто» і почати з 1 серії"
+                            onClicked: {
+                                page.details.resetProgress()
+                                page.startEpisode(0)
+                            }
+                        }
                         AppButton {
                             id: favButton
                             implicitHeight: 44

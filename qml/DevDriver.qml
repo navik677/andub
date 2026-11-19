@@ -4,6 +4,8 @@ import QtQuick
 // ANDUB_DEV_ACTION: settings[:end] | downloads | favorites | details:<row> | play:<row> | testfile:<path> | reopen:<path>
 //                   filters[:<provider index>] (opens the filter panel) | filtered[:<provider index>] (sample filter applied)
 //                   gohome[:<provider index>] (filter + search + details page, then "Каталог" in the rail)
+//                   resume (details of row 0, logs the resume state, presses the main button, logs the player position)
+//                   rewatch (plays row 0 to 95%, logs "watched", then resets the title's progress and logs again)
 Item {
     readonly property var parts: devAction.split(":")
     readonly property string what: parts[0]
@@ -13,6 +15,16 @@ Item {
         interval: 2500
         running: true
         onTriggered: {
+            if (what === "rewatch") {
+                window.openDetails(0)
+                rewatchStep.start()
+                return
+            }
+            if (what === "resume") {
+                window.openDetails(0)
+                resumeStep.start()
+                return
+            }
             if (what === "gohome") {
                 if (arg !== "") Catalog.providerIndex = parseInt(arg)
                 Catalog.sort = 2
@@ -82,6 +94,42 @@ Item {
         }
     }
     property bool reopened: false
+    Timer {
+        id: rewatchStep
+        interval: 7000
+        property int step: 0
+        onTriggered: {
+            const page = browse.currentItem
+            const d = page.details
+            const p = player.item ? player.item.mpvPlayer : null
+            const log = tag => console.log("[rewatch] " + tag + ": watched=" + d.watchedCount + " hasProgress=" + d.hasProgress
+                                           + " resume=" + d.resumeNumber + " at=" + Math.round(d.resumePosition))
+            switch (step++) {
+            case 0: log("before"); page.play(0); interval = 9000; restart(); break
+            case 1: p.seek(p.duration * 0.95); interval = 4000; restart(); break
+            case 2: p.paused = true; interval = 1500; restart(); break
+            case 3: player.item.close(); log("after 95%"); d.resetProgress(); log("after reset"); break
+            }
+        }
+    }
+    Timer {
+        id: resumeStep
+        interval: 7000
+        property int step: 0
+        onTriggered: {
+            const d = browse.currentItem.details
+            if (step === 0) {
+                console.log("[resume] hasProgress=" + d.hasProgress + " index=" + d.resumeIndex + " number=" + d.resumeNumber
+                            + " position=" + d.resumePosition + " watched=" + d.watchedCount)
+                browse.currentItem.startEpisode(browse.currentItem.resume)
+                step = 1
+                restart()
+            } else {
+                const p = player.item ? player.item.mpvPlayer : null
+                console.log("[resume] player position=" + (p ? Math.round(p.position) : -1) + " duration=" + (p ? Math.round(p.duration) : -1))
+            }
+        }
+    }
     Timer {
         id: home
         interval: 6000
