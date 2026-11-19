@@ -88,10 +88,10 @@ Item {
             AppButton {
                 id: genreButton
                 readonly property string label: {
-                    for (const g of Catalog.genres) if (g.split("|")[1] === Catalog.genre) return g.split("|")[0]
+                    for (const g of Catalog.genres) if (g.value === Catalog.selectedGenres[0]) return g.label
                     return ""
                 }
-                kind: Catalog.genre ? "primary" : "secondary"
+                kind: Catalog.selectedGenres.length ? "primary" : "secondary"
                 iconName: "funnel"
                 text: page.narrow ? "" : (label || "Жанр")
                 tip: page.narrow ? (label || "Жанр") : ""
@@ -103,10 +103,10 @@ Item {
                     y: parent.height + 6
                     x: parent.width - width
                     title: "Жанр"
-                    value: Catalog.genre
+                    value: Catalog.selectedGenres.length ? Catalog.selectedGenres[0] : ""
                     model: [{ label: "Усі жанри", value: "" }].concat(
-                        Catalog.genres.map(g => ({ label: g.split("|")[0], value: g.split("|")[1] })))
-                    onPicked: v => Catalog.genre = v
+                        Catalog.genres)
+                    onPicked: v => Catalog.selectedGenres = v ? [v] : []
                 }
             }
         }
@@ -262,22 +262,22 @@ Item {
         visible: !Catalog.loading && Catalog.results.count === 0
         iconName: page.favorites ? "heart" : "magnifying-glass"
         title: {
-            if (page.favorites && !Catalog.query && !Catalog.genre) return "Тут поки порожньо"
+            if (page.favorites && !Catalog.query && !Catalog.activeFilterCount) return "Тут поки порожньо"
             return "Нічого не знайдено"
         }
         message: {
-            if (page.favorites && !Catalog.query && !Catalog.genre)
+            if (page.favorites && !Catalog.query && !Catalog.activeFilterCount)
                 return "Додавайте тайтли до улюблених на їхній сторінці, і вони з'являться тут."
-            if (Catalog.query || Catalog.genre) return "Спробуйте інший запит або приберіть фільтр жанру."
+            if (Catalog.query || Catalog.activeFilterCount) return "Спробуйте інший запит або приберіть частину фільтрів."
             return "Джерело не відповіло. Можливо, сайт тимчасово недоступний."
         }
-        actionText: (Catalog.query || Catalog.genre) ? "Скинути фільтри"
+        actionText: (Catalog.query || Catalog.activeFilterCount) ? "Скинути фільтри"
                     : (page.favorites ? "Перейти до каталогу" : "Спробувати ще раз")
         onAction: {
-            if (Catalog.query || Catalog.genre) {
+            if (Catalog.query || Catalog.activeFilterCount) {
                 search.text = ""
                 Catalog.query = ""
-                Catalog.genre = ""
+                Catalog.resetFilters()
             } else if (page.favorites) {
                 Catalog.favoritesMode = false
             } else {

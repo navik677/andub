@@ -39,6 +39,8 @@ public:
 
     void reset(std::vector<Anime> items);
     void append(std::vector<Anime> items);
+    // Re-orders in place (layoutChanged), so the view keeps its scroll position
+    void sortBy(SortOrder order);
 
     static QString formatRating(const std::string& raw);
 

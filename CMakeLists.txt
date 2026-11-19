@@ -188,7 +188,7 @@ foreach(tool mpv.exe yt-dlp.exe)
 endforeach()
 
 if(ANDUB_BUILD_TESTS)
-    foreach(t test_core test_img test_providers test_shiza_search)
+    foreach(t test_core test_img test_providers test_shiza_search test_filters)
         add_executable(${t} tests/${t}.cpp)
         target_link_libraries(${t} PRIVATE andub_core)
         set_target_properties(${t} PROPERTIES WIN32_EXECUTABLE OFF)

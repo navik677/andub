@@ -1,5 +1,6 @@
 #include "anime_list_model.hpp"
 #include "provider_registry.hpp"
+#include "../models/catalog_match.hpp"
 #include <QStringList>
 
 namespace anime::app {
@@ -86,6 +87,13 @@ void AnimeListModel::append(std::vector<Anime> items) {
     for (auto& a : items) items_.push_back(std::move(a));
     endInsertRows();
     emit countChanged();
+}
+
+void AnimeListModel::sortBy(SortOrder order) {
+    if (order == SortOrder::Default || order == SortOrder::Updated || items_.size() < 2) return;
+    emit layoutAboutToBeChanged();
+    sort_items(items_, order);
+    emit layoutChanged();
 }
 
 } // namespace anime::app
