@@ -4,8 +4,8 @@ IDI_ICON1 ICON "andub.ico"
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "andub.manifest"
 
 1 VERSIONINFO
-FILEVERSION     2,1,0,0
-PRODUCTVERSION  2,1,0,0
+FILEVERSION     2,2,0,0
+PRODUCTVERSION  2,2,0,0
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
@@ -13,12 +13,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "navik677"
       VALUE "FileDescription", "Andub"
-      VALUE "FileVersion", "2.1.0"
+      VALUE "FileVersion", "2.2.0"
       VALUE "InternalName", "andub"
       VALUE "LegalCopyright", "navik677"
       VALUE "OriginalFilename", "andub.exe"
       VALUE "ProductName", "Andub"
-      VALUE "ProductVersion", "2.1.0"
+      VALUE "ProductVersion", "2.2.0"
     END
   END
   BLOCK "VarFileInfo"
