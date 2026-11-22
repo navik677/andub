@@ -80,17 +80,7 @@ Item {
                 font.pixelSize: Theme.fontXl
                 font.weight: Font.Bold
             }
-            Item { Layout.fillWidth: true; visible: !page.narrow }
-
-            SearchField {
-                id: search
-                Layout.fillWidth: page.narrow
-                Layout.preferredWidth: page.narrow ? -1 : Math.min(440, page.width * 0.36)
-                placeholderText: page.favorites ? "Пошук в улюблених" : "Пошук аніме"
-                text: Catalog.query
-                onTextEdited: searchDebounce.restart()
-                onAccepted: { searchDebounce.stop(); Catalog.query = text }
-            }
+            Item { Layout.fillWidth: true }
 
             AppButton {
                 id: sortButton
@@ -138,24 +128,40 @@ Item {
             }
         }
 
-        // Provider switcher
-        ListView {
-            id: providers
-            visible: !page.favorites
+        // Provider switcher with the search field at its end
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
-            orientation: ListView.Horizontal
-            spacing: 8
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            model: Catalog.providers
-            currentIndex: Catalog.providerIndex
-            delegate: Chip {
-                required property string modelData
-                required property int index
-                text: modelData
-                checked: index === Catalog.providerIndex
-                onClicked: Catalog.providerIndex = index
+            spacing: 12
+
+            ListView {
+                id: providers
+                visible: !page.favorites
+                Layout.fillWidth: true
+                Layout.preferredHeight: 34
+                orientation: ListView.Horizontal
+                spacing: 8
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                model: Catalog.providers
+                currentIndex: Catalog.providerIndex
+                delegate: Chip {
+                    required property string modelData
+                    required property int index
+                    text: modelData
+                    checked: index === Catalog.providerIndex
+                    onClicked: Catalog.providerIndex = index
+                }
+            }
+            Item { Layout.fillWidth: true; visible: page.favorites }
+
+            SearchField {
+                id: search
+                compact: true
+                Layout.preferredWidth: page.narrow ? 190 : Math.min(320, Math.max(220, page.width * 0.24))
+                placeholderText: page.favorites ? "Пошук в улюблених" : "Пошук аніме"
+                text: Catalog.query
+                onTextEdited: searchDebounce.restart()
+                onAccepted: { searchDebounce.stop(); Catalog.query = text }
             }
         }
 

@@ -4,30 +4,32 @@ import Andub
 
 T.TextField {
     id: control
-    implicitHeight: 42
+    // compact: chip-sized pill, for sitting in a row of chips
+    property bool compact: false
+    implicitHeight: compact ? 34 : 42
     implicitWidth: 360
-    leftPadding: 42
+    leftPadding: compact ? 36 : 42
     rightPadding: text.length > 0 ? 40 : 14
     color: Theme.text
     placeholderTextColor: Theme.textFaint
     selectionColor: Theme.accentSoft
     selectedTextColor: Theme.text
-    font.pixelSize: Theme.fontMd
+    font.pixelSize: compact ? Theme.fontSm : Theme.fontMd
     verticalAlignment: TextInput.AlignVCenter
     selectByMouse: true
 
     background: Rectangle {
-        radius: Theme.radius
+        radius: control.compact ? height / 2 : Theme.radius
         color: control.activeFocus ? Theme.surface : Theme.surfaceHi
         border.width: control.activeFocus ? 1.5 : 1
         border.color: control.activeFocus ? Theme.accent : (control.hovered ? Theme.lineStrong : Theme.line)
         Behavior on color { ColorAnimation { duration: Theme.durFast } }
 
         Icon {
-            x: 14
+            x: control.compact ? 13 : 14
             anchors.verticalCenter: parent.verticalCenter
             name: "magnifying-glass"
-            size: 18
+            size: control.compact ? 16 : 18
             color: control.activeFocus ? Theme.text : Theme.textFaint
         }
         // T.TextField has no built-in placeholder item
@@ -44,8 +46,8 @@ T.TextField {
             anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
             visible: control.text.length > 0
-            size: 28
-            iconSize: 14
+            size: control.compact ? 24 : 28
+            iconSize: control.compact ? 12 : 14
             iconName: "x"
             iconColor: Theme.textMuted
             tip: "Очистити"
