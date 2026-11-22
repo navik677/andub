@@ -1,13 +1,24 @@
 // HTTP client on WinHTTP: no extra DLLs, TLS and certificates come from the
 // system (Schannel + Windows certificate store), proxy settings follow Windows.
+//
+// Cloudflare-fronted sites (AniStar) answer WinHTTP with a "Just a moment"
+// challenge page whatever the headers or HTTP version, while curl on the same
+// Schannel passes. Such requests are retried with the curl.exe that ships with
+// Windows 10+ (System32), and that host goes straight to curl afterwards.
 #include "http_client.hpp"
 
 #include <windows.h>
 #include <winhttp.h>
 
 #include <cstdio>
+#include <cctype>
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
 #include <mutex>
+#include <set>
 #include <unordered_map>
+#include <vector>
 
 namespace {
 
@@ -60,8 +71,7 @@ HINTERNET open_session(bool keep_cookies) {
     }
     DWORD decompression = WINHTTP_DECOMPRESSION_FLAG_ALL;
     WinHttpSetOption(s, WINHTTP_OPTION_DECOMPRESSION, &decompression, sizeof decompression);
-    // HTTP/2 where the server offers it (Windows 10 1607+). Cloudflare-fronted
-    // sites (AniStar) answer plain HTTP/1.1 clients with a "Just a moment" 403.
+    // HTTP/2 where the server offers it (Windows 10 1607+).
     DWORD http2 = WINHTTP_PROTOCOL_FLAG_HTTP2;
     WinHttpSetOption(s, WINHTTP_OPTION_ENABLE_HTTP_PROTOCOL, &http2, sizeof http2);
     if (!keep_cookies) {
@@ -171,29 +181,198 @@ anime::http::Response perform(const std::wstring& method, const std::string& url
     return resp;
 }
 
+// ---- curl.exe fallback for Cloudflare challenges --------------------------
+
+bool is_challenge(const anime::http::Response& r) {
+    if (r.status_code != 403 && r.status_code != 503) return false;
+    return r.body.find("Just a moment") != std::string::npos ||
+           r.body.find("challenge-platform") != std::string::npos || r.body.find("cf_chl") != std::string::npos;
+}
+
+std::wstring host_of(const std::string& url) {
+    const std::wstring w = widen(url);
+    URL_COMPONENTS uc{};
+    uc.dwStructSize = sizeof uc;
+    uc.dwHostNameLength = static_cast<DWORD>(-1);
+    if (!WinHttpCrackUrl(w.c_str(), static_cast<DWORD>(w.size()), 0, &uc)) return {};
+    return std::wstring(uc.lpszHostName, uc.dwHostNameLength);
+}
+
+std::mutex g_curl_hosts_mutex;
+std::set<std::wstring> g_curl_hosts;
+
+bool use_curl_for(const std::string& url) {
+    std::lock_guard lock(g_curl_hosts_mutex);
+    return g_curl_hosts.count(host_of(url)) > 0;
+}
+
+void remember_curl_host(const std::string& url) {
+    std::lock_guard lock(g_curl_hosts_mutex);
+    g_curl_hosts.insert(host_of(url));
+}
+
+std::wstring curl_exe() {
+    wchar_t dir[MAX_PATH];
+    const UINT n = GetSystemDirectoryW(dir, MAX_PATH);
+    return std::wstring(dir, n) + L"\\curl.exe";
+}
+
+std::wstring temp_path(const wchar_t* prefix) {
+    wchar_t dir[MAX_PATH], file[MAX_PATH];
+    GetTempPathW(MAX_PATH, dir);
+    GetTempFileNameW(dir, prefix, 0, file);
+    return file;
+}
+
+// One argument for CreateProcess, quoted the way the MSVC runtime parses it
+std::wstring quote_arg(const std::wstring& a) {
+    std::wstring out = L"\"";
+    size_t backslashes = 0;
+    for (wchar_t c : a) {
+        if (c == L'\\') {
+            ++backslashes;
+        } else if (c == L'"') {
+            out.append(backslashes * 2 + 1, L'\\');
+            out += L'"';
+            backslashes = 0;
+            continue;
+        } else {
+            backslashes = 0;
+        }
+        out += c;
+    }
+    out.append(backslashes * 2, L'\\');
+    return out + L"\"";
+}
+
+std::string read_file(const std::wstring& path) {
+    std::ifstream f(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
+// Runs System32\curl.exe; the body goes to out_path, the status code comes back
+// on stdout. No console window.
+anime::http::Response curl_request(const std::string& url, const std::string* body,
+                                   const std::map<std::string, std::string>& headers, int timeout_sec,
+                                   const std::string& jar, const std::wstring& out_path) {
+    anime::http::Response resp;
+    std::vector<std::wstring> args = {L"-s", L"-S", L"-L", L"--compressed", L"--max-time",
+                                      std::to_wstring(timeout_sec), L"-o", out_path, L"-w", L"%{http_code}"};
+    bool has_ua = false;
+    for (const auto& [k, v] : headers) {
+        if (_stricmp(k.c_str(), "User-Agent") == 0) has_ua = true;
+        args.push_back(L"-H");
+        args.push_back(widen(k + ": " + v));
+    }
+    if (!has_ua) {
+        args.push_back(L"-A");
+        args.push_back(kUserAgent);
+    }
+    std::wstring body_file;
+    if (body) {
+        body_file = temp_path(L"adq");
+        std::ofstream(body_file, std::ios::binary).write(body->data(), static_cast<std::streamsize>(body->size()));
+        args.push_back(L"--data-binary");
+        args.push_back(L"@" + body_file);
+    }
+    if (!jar.empty()) {
+        wchar_t dir[MAX_PATH];
+        GetTempPathW(MAX_PATH, dir);
+        const std::wstring cookies = std::wstring(dir) + L"andub-" + widen(jar) + L".cookies";
+        args.push_back(L"-b");
+        args.push_back(cookies);
+        args.push_back(L"-c");
+        args.push_back(cookies);
+    }
+    args.push_back(widen(url));
+
+    std::wstring cmd = quote_arg(curl_exe());
+    for (const auto& a : args) cmd += L" " + quote_arg(a);
+
+    SECURITY_ATTRIBUTES sa{sizeof sa, nullptr, TRUE};
+    HANDLE read_end = nullptr, write_end = nullptr;
+    CreatePipe(&read_end, &write_end, &sa, 0);
+    SetHandleInformation(read_end, HANDLE_FLAG_INHERIT, 0);
+    STARTUPINFOW si{};
+    si.cb = sizeof si;
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = write_end;
+    si.hStdError = write_end;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    PROCESS_INFORMATION pi{};
+    std::vector<wchar_t> buf(cmd.begin(), cmd.end());
+    buf.push_back(L'\0');
+    const BOOL ok = CreateProcessW(nullptr, buf.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    CloseHandle(write_end);
+    if (!ok) {
+        CloseHandle(read_end);
+        if (!body_file.empty()) DeleteFileW(body_file.c_str());
+        resp.error = "curl.exe could not be started";
+        return resp;
+    }
+    std::string out;
+    char chunk[512];
+    DWORD got = 0;
+    while (ReadFile(read_end, chunk, sizeof chunk, &got, nullptr) && got > 0) out.append(chunk, got);
+    CloseHandle(read_end);
+    WaitForSingleObject(pi.hProcess, static_cast<DWORD>((timeout_sec + 5) * 1000));
+    DWORD exit_code = 1;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    if (!body_file.empty()) DeleteFileW(body_file.c_str());
+
+    // stdout ends with the status code written by -w
+    size_t digits = out.size();
+    while (digits > 0 && std::isdigit(static_cast<unsigned char>(out[digits - 1]))) --digits;
+    resp.status_code = std::atoi(out.c_str() + digits);
+    if (exit_code != 0) resp.error = "curl: " + out.substr(0, digits);
+    return resp;
+}
+
+anime::http::Response curl_text(const std::string& url, const std::string* body,
+                                const std::map<std::string, std::string>& headers, int timeout_sec,
+                                const std::string& jar) {
+    const std::wstring out = temp_path(L"adr");
+    anime::http::Response r = curl_request(url, body, headers, timeout_sec, jar, out);
+    r.body = read_file(out);
+    DeleteFileW(out.c_str());
+    return r;
+}
+
 } // namespace
 
 namespace anime::http {
 
 Response Client::get(const std::string& url, const std::map<std::string, std::string>& headers, int timeout_sec,
                      const std::string& cookie_jar) {
+    if (use_curl_for(url)) return curl_text(url, nullptr, headers, timeout_sec, cookie_jar);
     std::string out;
     Response r = perform(L"GET", url, nullptr, headers, timeout_sec, cookie_jar, [&](const char* p, DWORD n) {
         out.append(p, n);
         return true;
     });
     r.body = std::move(out);
+    if (is_challenge(r)) {
+        remember_curl_host(url);
+        return curl_text(url, nullptr, headers, timeout_sec, cookie_jar);
+    }
     return r;
 }
 
 Response Client::post(const std::string& url, const std::string& data, const std::map<std::string, std::string>& headers,
                       int timeout_sec, const std::string& cookie_jar) {
+    if (use_curl_for(url)) return curl_text(url, &data, headers, timeout_sec, cookie_jar);
     std::string out;
     Response r = perform(L"POST", url, &data, headers, timeout_sec, cookie_jar, [&](const char* p, DWORD n) {
         out.append(p, n);
         return true;
     });
     r.body = std::move(out);
+    if (is_challenge(r)) {
+        remember_curl_host(url);
+        return curl_text(url, &data, headers, timeout_sec, cookie_jar);
+    }
     return r;
 }
 
@@ -214,12 +393,24 @@ std::future<Response> Client::post_async(std::string url, std::string data, std:
 }
 
 bool Client::download_file(const std::string& url, const std::string& dest_path, int timeout_sec) {
+    if (use_curl_for(url)) {
+        Response r = curl_request(url, nullptr, {}, timeout_sec, {}, widen(dest_path));
+        return r.error.empty() && r.success();
+    }
     FILE* fp = _wfopen(widen(dest_path).c_str(), L"wb");
     if (!fp) return false;
     Response r = perform(L"GET", url, nullptr, {}, timeout_sec, {}, [&](const char* p, DWORD n) {
         return std::fwrite(p, 1, n, fp) == n;
     });
     std::fclose(fp);
+    // Cloudflare challenge on a host not seen before (the page body went to the file)
+    if (r.error.empty() && (r.status_code == 403 || r.status_code == 503)) {
+        Response c = curl_request(url, nullptr, {}, timeout_sec, {}, widen(dest_path));
+        if (c.error.empty() && c.success()) {
+            remember_curl_host(url);
+            return true;
+        }
+    }
     // Don't cache a 404/403 error page as if it were an image
     return r.error.empty() && r.success();
 }
