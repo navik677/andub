@@ -124,7 +124,7 @@ qt_add_qml_module(andub
         qml/pages/DownloadsPage.qml
         qml/pages/SettingsPage.qml
     RESOURCES
-        resources/andub.svg
+        resources/andub.png
         resources/fonts/Manrope.ttf
         resources/icons/arrow-clockwise.svg
         resources/icons/arrow-counter-clockwise.svg

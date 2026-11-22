@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication::setApplicationName(QStringLiteral("Andub"));
     QGuiApplication::setApplicationVersion(QStringLiteral(ANDUB_VERSION));
     QGuiApplication::setOrganizationName(QStringLiteral("Andub"));
-    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Andub/resources/andub.svg")));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Andub/resources/andub.png")));
     std::setlocale(LC_NUMERIC, "C");
 
     QFontDatabase::addApplicationFont(QStringLiteral(":/qt/qml/Andub/resources/fonts/Manrope.ttf"));
