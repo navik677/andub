@@ -157,7 +157,9 @@ Item {
             SearchField {
                 id: search
                 compact: true
-                Layout.preferredWidth: page.narrow ? 190 : Math.min(320, Math.max(220, page.width * 0.24))
+                shortcutHint: page.narrow ? "" : "Ctrl K"
+                Layout.alignment: Qt.AlignVCenter
+                Layout.preferredWidth: page.narrow ? 200 : Math.min(400, Math.max(260, page.width * 0.3))
                 placeholderText: page.favorites ? "Пошук в улюблених" : "Пошук аніме"
                 text: Catalog.query
                 onTextEdited: searchDebounce.restart()
