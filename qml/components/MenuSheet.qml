@@ -31,6 +31,9 @@ T.Popup {
         color: Theme.dark ? Theme.surfaceHi : Theme.surface
         border.width: 1
         border.color: Theme.lineStrong
+        // A non-modal popup lets presses it does not accept through to whatever is
+        // underneath (e.g. a catalog card), so the whole sheet swallows them
+        MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
     }
 
     contentItem: Column {
@@ -89,6 +92,9 @@ T.Popup {
                 }
                 HoverHandler { id: rowHover; cursorShape: Qt.PointingHandCursor }
                 TapHandler {
+                    // Exclusive grab on press: the release must not also reach a
+                    // passive TapHandler of the item behind the popup
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
                     onTapped: {
                         popup.picked(row.modelData.value)
                         popup.close()
