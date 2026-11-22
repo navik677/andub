@@ -284,9 +284,20 @@ Item {
             return item ? item.posterUrl : ""
         }
 
-        onContentYChanged: {
-            if (contentHeight > 0 && contentY + height > contentHeight - cellHeight * 2)
+        // Load the next page near the bottom, and also when a page doesn't even
+        // fill the view (AniTube lists 11 titles per page, AniStar 9): then
+        // there is nothing to scroll and the check must run on its own.
+        function maybeLoadMore() {
+            if (Catalog.hasMore && !Catalog.loading && !Catalog.loadingMore
+                    && contentY + height > contentHeight - cellHeight * 2)
                 Catalog.loadMore()
+        }
+        onContentYChanged: maybeLoadMore()
+        onContentHeightChanged: Qt.callLater(maybeLoadMore)
+        onHeightChanged: Qt.callLater(maybeLoadMore)
+        Connections {
+            target: Catalog
+            function onStateChanged() { Qt.callLater(grid.maybeLoadMore) }
         }
 
         delegate: Item {

@@ -7,6 +7,7 @@ import QtQuick
 //                   resume (details of row 0, logs the resume state, presses the main button, logs the player position)
 //                   rewatch (plays row 0 to 95%, logs "watched", then resets the title's progress and logs again)
 //                   history (filter -> details -> settings, then back x2, forward x2; logs each step)
+//                   count (logs how many titles the catalog holds after 15 s)
 Item {
     readonly property var parts: devAction.split(":")
     readonly property string what: parts[0]
@@ -16,6 +17,10 @@ Item {
         interval: 2500
         running: true
         onTriggered: {
+            if (what === "count") {
+                countLog.start()
+                return
+            }
             if (what === "history") {
                 historyStep.start()
                 return
@@ -99,6 +104,12 @@ Item {
         }
     }
     property bool reopened: false
+    Timer {
+        id: countLog
+        interval: 12500
+        onTriggered: console.log("[count] provider=" + Catalog.providers[Catalog.providerIndex] + " results=" + Catalog.results.count
+                                 + " hasMore=" + Catalog.hasMore + " loading=" + Catalog.loading + "/" + Catalog.loadingMore)
+    }
     Timer {
         id: historyStep
         interval: 4000
