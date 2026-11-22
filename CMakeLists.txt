@@ -129,6 +129,7 @@ qt_add_qml_module(andub
         resources/icons/arrow-clockwise.svg
         resources/icons/arrow-counter-clockwise.svg
         resources/icons/arrow-left.svg
+        resources/icons/arrow-right.svg
         resources/icons/arrow-square-out.svg
         resources/icons/arrows-down-up.svg
         resources/icons/caret-down.svg

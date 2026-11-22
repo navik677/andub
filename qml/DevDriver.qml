@@ -6,6 +6,7 @@ import QtQuick
 //                   gohome[:<provider index>] (filter + search + details page, then "Каталог" in the rail)
 //                   resume (details of row 0, logs the resume state, presses the main button, logs the player position)
 //                   rewatch (plays row 0 to 95%, logs "watched", then resets the title's progress and logs again)
+//                   history (filter -> details -> settings, then back x2, forward x2; logs each step)
 Item {
     readonly property var parts: devAction.split(":")
     readonly property string what: parts[0]
@@ -15,6 +16,10 @@ Item {
         interval: 2500
         running: true
         onTriggered: {
+            if (what === "history") {
+                historyStep.start()
+                return
+            }
             if (what === "rewatch") {
                 window.openDetails(0)
                 rewatchStep.start()
@@ -94,6 +99,29 @@ Item {
         }
     }
     property bool reopened: false
+    Timer {
+        id: historyStep
+        interval: 4000
+        property int step: 0
+        onTriggered: {
+            const top = browse.currentItem
+            const log = tag => console.log("[history] " + tag + ": section=" + window.section + " page=" + pages.currentIndex
+                + " depth=" + browse.depth + " title=" + (browse.depth > 1 && top.details ? top.details.title : "-")
+                + " kinds=" + JSON.stringify(Catalog.kinds) + " entries=" + window.history.length + " at=" + window.historyIndex
+                + " back=" + window.canGoBack + " fwd=" + window.canGoForward)
+            switch (step++) {
+            case 0: Catalog.kinds = [1]; log("filter set"); break
+            case 1: window.openDetails(0); log("details"); break
+            case 2: window.navigate("settings"); log("settings"); break
+            case 3: window.goBack(); log("back 1"); break
+            case 4: window.goBack(); log("back 2"); break
+            case 5: window.goForward(); log("forward 1"); break
+            case 6: window.goForward(); log("forward 2"); break
+            case 7: window.goBack(); window.goBack(); window.navigate("downloads"); log("new move after back"); return
+            }
+            restart()
+        }
+    }
     Timer {
         id: rewatchStep
         interval: 7000

@@ -7,7 +7,11 @@ Rectangle {
     id: rail
     property string current: "catalog"
     property int downloadsActive: 0
+    property bool canGoBack: false
+    property bool canGoForward: false
     signal navigate(string section)
+    signal back()
+    signal forward()
 
     implicitWidth: 92
     color: Theme.dark ? Qt.darker(Theme.bg, 1.15) : Theme.surface
@@ -85,12 +89,35 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            Layout.bottomMargin: 18
+            Layout.bottomMargin: 8
             text: "andub"
             color: Theme.text
             font.pixelSize: 17
             font.weight: Font.ExtraBold
             font.letterSpacing: -0.4
+        }
+
+        // Browser-style history arrows
+        Row {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.bottomMargin: 10
+            spacing: 2
+            IconButton {
+                size: 32
+                iconSize: 17
+                iconName: "arrow-left"
+                tip: "Назад (Alt+←)"
+                enabled: rail.canGoBack
+                onClicked: rail.back()
+            }
+            IconButton {
+                size: 32
+                iconSize: 17
+                iconName: "arrow-right"
+                tip: "Вперед (Alt+→)"
+                enabled: rail.canGoForward
+                onClicked: rail.forward()
+            }
         }
 
         NavItem { section: "catalog"; iconName: "squares-four"; label: "Каталог" }

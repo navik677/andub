@@ -15,6 +15,13 @@ Item {
 
     Connections {
         target: Catalog
+        // Back/forward restores the query from history: show it in the field
+        function onQueryChanged() {
+            if (search.text !== Catalog.query) {
+                searchDebounce.stop()
+                search.text = Catalog.query
+            }
+        }
         function onGenerationChanged() {
             page.entranceStart = Date.now()
             grid.contentY = grid.originY

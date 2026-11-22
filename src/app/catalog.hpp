@@ -102,6 +102,11 @@ public:
     // "Каталог" in the navigation rail: the provider's front page, i.e. no
     // search, no filters, default order, not in favorites. One reload at most.
     Q_INVOKABLE void goHome();
+    // Back/forward history: everything that defines what the catalog shows
+    // (source, search, favorites mode, filters, sort). restoreState() reloads
+    // once, and only if something differs.
+    Q_INVOKABLE QVariantMap saveState() const;
+    Q_INVOKABLE void restoreState(const QVariantMap& state);
     Q_INVOKABLE void toggleGenre(const QString& value);
     Q_INVOKABLE void toggleKind(int kind);
     Q_INVOKABLE anime::app::Details* openDetails(int row);

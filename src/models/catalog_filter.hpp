@@ -32,6 +32,7 @@ struct CatalogFilter {
     std::vector<std::string> genres;   // catalog values (Russian names); every one must match
     int max_age = 0;                   // 0 = any; otherwise hide titles rated above (6/12/16/18)
 
+    bool operator==(const CatalogFilter&) const = default;
     bool has_years() const { return year_from > 0 || year_to > 0; }
     bool empty_filters() const {
         return !has_years() && season == Season::Unknown && kinds.empty() && airing == Airing::Unknown &&

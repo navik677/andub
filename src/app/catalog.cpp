@@ -1,4 +1,5 @@
 #include "catalog.hpp"
+#include <algorithm>
 #include "details.hpp"
 #include "provider_registry.hpp"
 #include "settings.hpp"
@@ -179,6 +180,70 @@ void Catalog::goHome() {
     emit filterChanged();
     filter_debounce_.stop();
     if (changed) refresh();
+}
+
+QVariantMap Catalog::saveState() const {
+    return {
+        {"provider", provider_index_},
+        {"query", query_},
+        {"favorites", favorites_},
+        {"sort", sort()},
+        {"yearFrom", filter_.year_from},
+        {"yearTo", filter_.year_to},
+        {"season", season()},
+        {"kinds", kinds()},
+        {"airing", airing()},
+        {"maxAge", filter_.max_age},
+        {"genres", selectedGenres()},
+    };
+}
+
+void Catalog::restoreState(const QVariantMap& state) {
+    if (state.isEmpty()) return;
+    bool changed = false;
+
+    const int provider = state.value("provider", provider_index_).toInt();
+    const auto& all = ProviderRegistry::all();
+    if (provider >= 0 && provider < static_cast<int>(all.size()) && provider != provider_index_) {
+        provider_index_ = provider;
+        Settings::instance()->setProvider(QString::fromStdString(all[static_cast<size_t>(provider)]->name()));
+        emit providerIndexChanged();
+        changed = true;
+    }
+    const QString query = state.value("query").toString();
+    if (query != query_) {
+        query_ = query;
+        emit queryChanged();
+        changed = true;
+    }
+    const bool favorites = state.value("favorites").toBool();
+    if (favorites != favorites_) {
+        favorites_ = favorites;
+        emit favoritesModeChanged();
+        changed = true;
+    }
+
+    CatalogFilter f;
+    f.sort = static_cast<SortOrder>(std::clamp(state.value("sort").toInt(), 0, static_cast<int>(SortOrder::Title)));
+    f.year_from = state.value("yearFrom").toInt();
+    f.year_to = state.value("yearTo").toInt();
+    f.season = static_cast<Season>(std::clamp(state.value("season").toInt(), 0, static_cast<int>(Season::Autumn)));
+    for (const auto& k : state.value("kinds").toList()) {
+        const int i = k.toInt();
+        if (i > 0 && i <= static_cast<int>(Kind::Special)) f.kinds.push_back(static_cast<Kind>(i));
+    }
+    f.airing = static_cast<Airing>(std::clamp(state.value("airing").toInt(), 0, static_cast<int>(Airing::Announced)));
+    f.max_age = state.value("maxAge").toInt();
+    for (const auto& g : state.value("genres").toStringList()) f.genres.push_back(g.toStdString());
+    if (!(f == filter_)) {
+        filter_ = f;
+        changed = true;
+    }
+
+    emit supportChanged();
+    emit filterChanged();
+    filter_debounce_.stop();
+    if (changed || favorites_dirty_) refresh();
 }
 
 void Catalog::filterEdited() {
