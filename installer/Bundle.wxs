@@ -27,7 +27,7 @@
           LicenseUrl=""
           LocalizationFile="$(sys.SOURCEFILEDIR)Bundle.uk-ua.wxl"
           LogoFile="$(sys.SOURCEFILEDIR)logo.png"
-          LaunchTarget="[INSTALLFOLDER]andub.exe"
+          LaunchTarget="[INSTALLFOLDER]\andub.exe"
           LaunchWorkingFolder="[INSTALLFOLDER]"
           SuppressOptionsUI="no"
           SuppressRepair="yes" />
@@ -42,7 +42,10 @@
     <bal:Condition Message="Знайдено попередню версію Andub, встановлену старим інсталятором. Видаліть її в «Параметри → Програми» (улюблені та історія залишаться) і запустіть встановлення знову."
                    Condition="NOT LegacyAndubInstalled" />
 
-    <!-- Shown on the Options page; passed to the MSI -->
+    <!-- Shown on the Options page; passed to the MSI. No trailing backslash here,
+         and a user-typed folder may or may not have one, so LaunchTarget adds its
+         own separator ("C:\x\\andub.exe" is still a valid path). -->
+
     <Variable Name="INSTALLFOLDER" Type="formatted" bal:Overridable="yes"
               Value="[LocalAppDataFolder]Programs\Andub" />
     <Variable Name="DESKTOP_SHORTCUT" Type="numeric" Value="1" bal:Overridable="yes" />
